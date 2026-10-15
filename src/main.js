@@ -2,12 +2,19 @@ import { SynthEngine } from './synthEngine.js';
 
 const synth = new SynthEngine();
 
-// Render Step Sequencer Channels with Mute/Solo & Volume
+// Render Step Sequencer Channels for the currently active FL Pattern
 function initSequencerUI() {
   const container = document.getElementById('step-channels-container');
   container.innerHTML = '';
 
-  synth.channels.forEach((ch, chIdx) => {
+  const activePat = synth.getActivePattern();
+  const labelElem = document.getElementById('active-pattern-label');
+  if (labelElem) {
+    labelElem.textContent = activePat.name;
+    labelElem.style.color = activePat.color;
+  }
+
+  activePat.channels.forEach((ch, chIdx) => {
     const row = document.createElement('div');
     row.className = 'channel-row';
 
@@ -58,6 +65,72 @@ function initSequencerUI() {
 
     row.appendChild(stepsGrid);
     container.appendChild(row);
+  });
+}
+
+// Render 16-Bar Timeline Playlist Arranger (Tracks 1 to 4)
+function initPlaylistUI() {
+  const rulerContainer = document.getElementById('playlist-ruler-bars');
+  const tracksBody = document.getElementById('playlist-tracks-body');
+  if (!rulerContainer || !tracksBody) return;
+
+  // Build Ruler Bar Numbers 1 to 16
+  rulerContainer.innerHTML = '';
+  for (let bar = 0; bar < synth.totalBars; bar++) {
+    const tick = document.createElement('div');
+    tick.className = 'ruler-bar-tick';
+    tick.dataset.bar = bar;
+    tick.textContent = `BAR ${bar + 1}`;
+    rulerContainer.appendChild(tick);
+  }
+
+  // Build Tracks and Bar Slots
+  tracksBody.innerHTML = '';
+  synth.playlistTracks.forEach((track, trackIdx) => {
+    const row = document.createElement('div');
+    row.className = 'playlist-track-row';
+
+    const label = document.createElement('div');
+    label.className = 'playlist-track-label';
+    label.textContent = track.name;
+    row.appendChild(label);
+
+    const slotsGrid = document.createElement('div');
+    slotsGrid.className = 'playlist-track-slots';
+
+    track.bars.forEach((assignedPatId, barIdx) => {
+      const slot = document.createElement('div');
+      slot.className = 'track-bar-slot';
+      slot.dataset.track = trackIdx;
+      slot.dataset.bar = barIdx;
+
+      if (assignedPatId) {
+        slot.classList.add(`filled-${assignedPatId}`);
+        const patObj = synth.patterns.find(p => p.id === assignedPatId);
+        slot.textContent = patObj ? patObj.name.split(':')[0] : assignedPatId;
+      }
+
+      // Click to paint or remove pattern
+      slot.addEventListener('click', () => {
+        if (track.bars[barIdx] === synth.activePatternId) {
+          // Erase
+          track.bars[barIdx] = null;
+          slot.className = 'track-bar-slot';
+          slot.textContent = '';
+        } else {
+          // Paint active pattern
+          track.bars[barIdx] = synth.activePatternId;
+          slot.className = `track-bar-slot filled-${synth.activePatternId}`;
+          const patObj = synth.patterns.find(p => p.id === synth.activePatternId);
+          slot.textContent = patObj ? patObj.name.split(':')[0] : synth.activePatternId;
+        }
+      });
+
+      slotsGrid.appendChild(slot);
+    });
+
+    row.appendChild(slotsGrid);
+    tracksBody.appendChild(row);
   });
 }
 
@@ -274,33 +347,79 @@ function initKnobs() {
   });
 }
 
-// Transport & Sequencer Loop
+// Transport, Mode Toggling & Sequencer Loop
 function initTransport() {
   const playBtn = document.getElementById('btn-seq-play');
   const playText = document.getElementById('play-text');
   const bpmInput = document.getElementById('seq-bpm');
+  const btnModePat = document.getElementById('btn-mode-pat');
+  const btnModeSong = document.getElementById('btn-mode-song');
+  const patDropdown = document.getElementById('pattern-select-dropdown');
+  const brushBadge = document.getElementById('brush-badge');
+
+  // Mode Toggling: PAT vs SONG
+  if (btnModePat && btnModeSong) {
+    btnModePat.addEventListener('click', () => {
+      synth.playMode = 'PAT';
+      btnModePat.classList.add('active');
+      btnModeSong.classList.remove('active');
+    });
+
+    btnModeSong.addEventListener('click', () => {
+      synth.playMode = 'SONG';
+      btnModeSong.classList.add('active');
+      btnModePat.classList.remove('active');
+    });
+  }
+
+  // Pattern Selector Dropdown
+  if (patDropdown) {
+    patDropdown.addEventListener('change', (e) => {
+      synth.activePatternId = e.target.value;
+      const patObj = synth.getActivePattern();
+      if (brushBadge) {
+        brushBadge.textContent = patObj.name.split(':')[0];
+        brushBadge.style.color = patObj.color;
+        brushBadge.style.borderColor = patObj.color;
+      }
+      initSequencerUI();
+    });
+  }
 
   bpmInput.addEventListener('change', (e) => {
     synth.bpm = parseInt(e.target.value, 10) || 128;
     if (synth.isPlaying) {
-      synth.stopSequencer();
-      synth.startSequencer(handleStepTick);
+      synth.stopPlayback();
+      synth.startPlayback(handlePlaybackTick);
     }
   });
 
-  const handleStepTick = (stepIdx) => {
+  const handlePlaybackTick = (tickInfo) => {
+    // Sequencer step highlights
     document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
-    document.querySelectorAll(`.step-btn[data-step="${stepIdx}"]`).forEach(b => b.classList.add('current-step-tick'));
+    document.querySelectorAll(`.step-btn[data-step="${tickInfo.step}"]`).forEach(b => b.classList.add('current-step-tick'));
+
+    // Song mode playlist highlights
+    if (tickInfo.mode === 'SONG') {
+      document.querySelectorAll('.ruler-bar-tick').forEach(t => t.classList.remove('current-bar-tick'));
+      const activeRuler = document.querySelector(`.ruler-bar-tick[data-bar="${tickInfo.bar}"]`);
+      if (activeRuler) activeRuler.classList.add('current-bar-tick');
+
+      document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
+      document.querySelectorAll(`.track-bar-slot[data-bar="${tickInfo.bar}"]`).forEach(s => s.classList.add('current-bar-active'));
+    }
   };
 
   playBtn.addEventListener('click', () => {
     if (synth.isPlaying) {
-      synth.stopSequencer();
+      synth.stopPlayback();
       playBtn.classList.remove('playing');
-      playText.textContent = 'PLAY PATTERN';
+      playText.textContent = 'PLAY';
       document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
+      document.querySelectorAll('.ruler-bar-tick').forEach(t => t.classList.remove('current-bar-tick'));
+      document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
     } else {
-      synth.startSequencer(handleStepTick);
+      synth.startPlayback(handlePlaybackTick);
       playBtn.classList.add('playing');
       playText.textContent = 'STOP';
     }
@@ -308,7 +427,8 @@ function initTransport() {
 
   // Random Acid Bassline Generator
   document.getElementById('btn-randomize-acid').addEventListener('click', () => {
-    const bassCh = synth.channels.find(c => c.id === 'acid_bass');
+    const activePat = synth.getActivePattern();
+    const bassCh = activePat.channels.find(c => c.id === 'acid_bass');
     if (bassCh) {
       const notes = ['C2', 'D#2', 'F2', 'G2', 'A#2', 'C3'];
       bassCh.note = notes[Math.floor(Math.random() * notes.length)];
@@ -373,9 +493,9 @@ function initSplashScreen() {
 
   const steps = [
     { pct: 25, text: 'CALIBRATING 64-BIT DUAL OSCILLATORS...' },
-    { pct: 55, text: 'WARMING 24dB RESONANT LADDER FILTER...' },
-    { pct: 85, text: 'INITIALIZING FL PATTERN STEP SEQUENCER...' },
-    { pct: 100, text: 'LOCALSYNTH STUDIO READY' }
+    { pct: 50, text: 'WARMING 24dB RESONANT LADDER FILTER...' },
+    { pct: 75, text: 'INITIALIZING FL MULTI-PATTERN SEQUENCER...' },
+    { pct: 100, text: '16-BAR PLAYLIST ARRANGEMENT ENGINE READY' }
   ];
 
   let currentStep = 0;
@@ -411,6 +531,7 @@ function initSplashScreen() {
 window.addEventListener('DOMContentLoaded', () => {
   initSplashScreen();
   initSequencerUI();
+  initPlaylistUI();
   initKeyboardUI();
   initKnobs();
   initTransport();

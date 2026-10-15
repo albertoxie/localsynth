@@ -50,11 +50,27 @@
 
     <!-- Master Transport & Arpeggiator Bar -->
     <div class="transport-bar">
+      <!-- FL Mode Switch: PAT (Pattern Loop) vs SONG (Timeline Playlist) -->
+      <div class="fl-mode-toggle-group">
+        <button class="fl-mode-btn active" id="btn-mode-pat" title="Loop Active Pattern">PAT</button>
+        <button class="fl-mode-btn" id="btn-mode-song" title="Play 16-Bar Timeline Playlist">SONG</button>
+      </div>
+
+      <!-- Pattern Selector -->
+      <div class="pattern-selector-group">
+        <span class="pat-label">PATTERN:</span>
+        <select id="pattern-select-dropdown" class="pattern-dropdown">
+          <option value="pat_1">Pattern 1: Intro Groove</option>
+          <option value="pat_2">Pattern 2: Acid Drop & 808</option>
+          <option value="pat_3">Pattern 3: Ambient Melodic Build</option>
+        </select>
+      </div>
+
       <button class="btn-transport" id="btn-seq-play">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        <span id="play-text">PLAY PATTERN</span>
+        <span id="play-text">PLAY</span>
       </button>
 
       <div class="bpm-control">
@@ -209,13 +225,42 @@
     <section class="sequencer-panel">
       <div class="sequencer-header">
         <div class="seq-title-group">
-          <span class="sequencer-title">FL PATTERN SEQUENCER (16 STEPS)</span>
-          <span class="seq-hint">CLICK TO TOGGLE STEPS · [M] MUTE · [S] SOLO</span>
+          <span class="sequencer-title">FL CHANNEL RACK / STEP SEQUENCER (16 STEPS)</span>
+          <span class="seq-hint">CLICK STEPS TO TOGGLE · EDITING <strong id="active-pattern-label" style="color:var(--accent-orange)">Pattern 1: Intro Groove</strong></span>
         </div>
       </div>
 
       <div class="step-channels-container" id="step-channels-container">
         <!-- Dynamically generated channel rows -->
+      </div>
+    </section>
+
+    <!-- FL Studio Timeline Playlist Arranger (Bars 1 to 16) -->
+    <section class="playlist-panel">
+      <div class="playlist-header">
+        <div class="playlist-title-group">
+          <span class="playlist-title">SONG PLAYLIST ARRANGER (16 BARS)</span>
+          <span class="playlist-hint">PAINT PATTERN BLOCKS ON TRACKS · CLICK BAR SLOT TO PLACE/REMOVE SELECTED PATTERN</span>
+        </div>
+        <div class="playlist-tools">
+          <span class="playlist-legend-label">ACTIVE PATTERN BRUSH:</span>
+          <span id="brush-badge" class="brush-badge">Pattern 1</span>
+        </div>
+      </div>
+
+      <div class="playlist-container" id="playlist-container">
+        <!-- Header Timeline Ruler (Bars 1-16) -->
+        <div class="playlist-ruler-row">
+          <div class="track-header-spacer">TRACKS</div>
+          <div class="playlist-ruler-bars" id="playlist-ruler-bars">
+            <!-- 16 bar tick labels -->
+          </div>
+        </div>
+
+        <!-- Playlist Tracks 1 to 4 -->
+        <div class="playlist-tracks-body" id="playlist-tracks-body">
+          <!-- Dynamic tracks rendered in main.js -->
+        </div>
       </div>
     </section>
 

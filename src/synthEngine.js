@@ -1,5 +1,5 @@
 // LocalSynth High-Performance Web Audio Synthesizer Engine
-// Polyphonic Dual-Oscillator Virtual Analog Synthesizer + FL Step Sequencer
+// Polyphonic Dual-Oscillator Virtual Analog Synthesizer + FL Step Sequencer & Song Playlist
 
 export class SynthEngine {
   constructor() {
@@ -24,56 +24,47 @@ export class SynthEngine {
 
     // Synth Parameters State
     this.params = {
-      // Osc 1
       osc1Wave: 'sawtooth',
       osc1Octave: 0,
       osc1Semi: 0,
       osc1Gain: 0.7,
 
-      // Osc 2
       osc2Wave: 'square',
       osc2Octave: -1,
-      osc2Semi: 7, // 5th interval
+      osc2Semi: 7,
       osc2Detune: 8,
       osc2Gain: 0.5,
 
-      // Sub Osc & Noise
       subGain: 0.4,
       noiseGain: 0.05,
 
-      // Filter (24dB/oct Ladder-style 4-pole approximation)
       filterCutoff: 1800,
       filterResonance: 4.5,
       filterDrive: 1.5,
       filterEnvAmount: 2400,
 
-      // Amp Envelope (ADSR)
       ampAttack: 0.01,
       ampDecay: 0.25,
       ampSustain: 0.6,
       ampRelease: 0.35,
 
-      // Filter Envelope (ADSR)
       filterAttack: 0.02,
       filterDecay: 0.35,
       filterSustain: 0.2,
       filterRelease: 0.4,
 
-      // LFO
       lfoWave: 'sine',
       lfoRate: 3.5,
       lfoToPitch: 0,
       lfoToFilter: 600,
 
-      // Effects
       delayTime: 0.25,
       delayFeedback: 0.35,
       delayMix: 0.25,
       distDrive: 0.0,
       reverbMix: 0.2,
 
-      // Arpeggiator
-      arpMode: 'off', // 'off', 'up', 'down', 'updown', 'random'
+      arpMode: 'off',
       arpRate: '1/16',
       arpOctaves: 2
     };
@@ -91,24 +82,95 @@ export class SynthEngine {
     this.lfo.connect(this.lfoGain);
     this.lfo.start();
 
-    // Step Sequencer State (FL Studio style 16-step grid)
+    // Playback Mode: 'PAT' (Pattern loop) or 'SONG' (Playlist Timeline)
+    this.playMode = 'PAT';
     this.bpm = 128;
     this.isPlaying = false;
     this.currentStep = 0;
+    this.currentSongBar = 0;
     this.sequencerTimer = null;
-    this.channels = [
-      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', volume: 0.85, mute: false, solo: false, steps: [1,0,0,0, 1,0,1,0, 1,0,0,0, 1,1,0,0] },
-      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', volume: 0.9, mute: false, solo: false, steps: [1,0,1,0, 1,0,1,0, 1,0,1,1, 1,0,1,0] },
-      { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0] },
-      { id: 'drum_snare', name: 'Studio Snare / Clap', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0] },
-      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] }
+
+    // Procedural Drum Sample Buffers (Expanded to 7 Instruments)
+    this.drumBuffers = this.createProceduralDrums();
+
+    // Multi-Pattern Architecture (FL Studio Channel Racks)
+    this.activePatternId = 'pat_1';
+    this.patterns = [
+      {
+        id: 'pat_1',
+        name: 'Pattern 1: Intro Groove',
+        color: '#f97316',
+        channels: this.createDefaultChannels([
+          [1,0,0,0, 1,0,1,0, 1,0,0,0, 1,1,0,0], // Synth Lead
+          [1,0,0,0, 1,0,0,0, 1,0,1,0, 1,0,0,0], // Acid Bass
+          [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], // 909 Kick
+          [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // Snare
+          [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], // HiHat
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // 808 Sub
+          [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // Clap
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]  // Crash
+        ])
+      },
+      {
+        id: 'pat_2',
+        name: 'Pattern 2: Acid Drop & 808',
+        color: '#06b6d4',
+        channels: this.createDefaultChannels([
+          [0,0,1,0, 0,1,0,0, 1,0,0,1, 0,0,1,0], // Synth Lead
+          [1,0,1,0, 1,0,1,0, 1,0,1,1, 1,0,1,0], // Acid Bass (Fast 303)
+          [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], // 909 Kick
+          [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // Snare
+          [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], // HiHat Roll
+          [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0], // 808 Sub Bass
+          [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // Clap
+          [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]  // Crash
+        ])
+      },
+      {
+        id: 'pat_3',
+        name: 'Pattern 3: Ambient Melodic Build',
+        color: '#a855f7',
+        channels: this.createDefaultChannels([
+          [1,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,0], // Synth Lead
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // Acid Bass (Muted)
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // Kick (Muted)
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // Snare
+          [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], // HiHat
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // 808
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // Clap
+          [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]  // Crash
+        ])
+      }
     ];
 
-    // Procedural Drum Sample Buffers
-    this.drumBuffers = this.createProceduralDrums();
+    // FL Studio Playlist Timeline Grid (16 Bars across 4 Playlist Tracks)
+    this.totalBars = 16;
+    this.playlistTracks = [
+      { id: 'track_1', name: 'Track 1 (Drums & Beat)', bars: ['pat_1', 'pat_1', 'pat_1', 'pat_1', 'pat_2', 'pat_2', 'pat_2', 'pat_2', 'pat_3', 'pat_3', 'pat_2', 'pat_2', 'pat_2', 'pat_2', 'pat_1', 'pat_1'] },
+      { id: 'track_2', name: 'Track 2 (Acid Bassline)', bars: [null, null, 'pat_1', 'pat_1', 'pat_2', 'pat_2', 'pat_2', 'pat_2', null, null, 'pat_2', 'pat_2', 'pat_2', 'pat_2', 'pat_1', null] },
+      { id: 'track_3', name: 'Track 3 (Synth Lead Melody)', bars: [null, null, null, null, 'pat_2', 'pat_2', 'pat_2', 'pat_2', 'pat_3', 'pat_3', 'pat_2', 'pat_2', null, null, null, null] },
+      { id: 'track_4', name: 'Track 4 (Drops & FX)', bars: ['pat_1', null, null, null, 'pat_2', null, null, null, null, null, 'pat_2', null, null, null, null, null] }
+    ];
 
     // Sound Presets Library
     this.presets = this.createPresetLibrary();
+  }
+
+  createDefaultChannels(stepGrids) {
+    return [
+      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', volume: 0.85, mute: false, solo: false, steps: stepGrids[0] || new Array(16).fill(0) },
+      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', volume: 0.95, mute: false, solo: false, steps: stepGrids[1] || new Array(16).fill(0) },
+      { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: stepGrids[2] || new Array(16).fill(0) },
+      { id: 'drum_snare', name: 'Studio Snare / Rim', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: stepGrids[3] || new Array(16).fill(0) },
+      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: stepGrids[4] || new Array(16).fill(0) },
+      { id: 'drum_808', name: 'Boom 808 Sub-Bass', type: 'drum', sample: 'sub808', volume: 0.9, mute: false, solo: false, steps: stepGrids[5] || new Array(16).fill(0) },
+      { id: 'drum_clap', name: 'Analog Handclap', type: 'drum', sample: 'clap', volume: 0.8, mute: false, solo: false, steps: stepGrids[6] || new Array(16).fill(0) },
+      { id: 'drum_crash', name: 'Cymbal Crash / Splash', type: 'drum', sample: 'crash', volume: 0.7, mute: false, solo: false, steps: stepGrids[7] || new Array(16).fill(0) }
+    ];
+  }
+
+  getActivePattern() {
+    return this.patterns.find(p => p.id === this.activePatternId) || this.patterns[0];
   }
 
   ensureContext() {
@@ -118,7 +180,6 @@ export class SynthEngine {
   }
 
   initMasterEffects() {
-    // Delay Effect
     this.delayNode = this.ctx.createDelay(2.0);
     this.delayNode.delayTime.value = 0.25;
     this.delayFeedbackNode = this.ctx.createGain();
@@ -131,7 +192,6 @@ export class SynthEngine {
     this.delayNode.connect(this.delayGain);
     this.delayGain.connect(this.masterGain);
 
-    // Distortion Waveshaper
     this.distNode = this.ctx.createWaveShaper();
     this.distNode.curve = this.makeDistortionCurve(0);
     this.distNode.oversample = '4x';
@@ -155,7 +215,6 @@ export class SynthEngine {
     this.distNode.curve = this.makeDistortionCurve(driveAmount * 100);
   }
 
-  // Presets Library
   createPresetLibrary() {
     return [
       {
@@ -233,7 +292,7 @@ export class SynthEngine {
     return p;
   }
 
-  // Arpeggiator Handling
+  // Arpeggiator
   startArpeggiator() {
     if (this.arpTimer) clearInterval(this.arpTimer);
     if (this.params.arpMode === 'off') return;
@@ -279,29 +338,17 @@ export class SynthEngine {
     this.arpStep = 0;
   }
 
-  noteToFreq(noteStr) {
-    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const match = noteStr.match(/([A-G]#?)([0-8])/);
-    if (!match) return 440;
-    const note = match[1];
-    const octave = parseInt(match[2], 10);
-    const semitone = notes.indexOf(note);
-    const midi = (octave + 1) * 12 + semitone;
-    return 440 * Math.pow(2, (midi - 69) / 12);
-  }
-
   midiToFreq(midiNote) {
     return 440 * Math.pow(2, (midiNote - 69) / 12);
   }
 
-  // Play Polyphonic Note (Piano keyboard or MIDI)
+  // Play Polyphonic Note
   noteOn(midiNote, velocity = 1.0) {
     this.ensureContext();
     if (this.activeVoices.has(midiNote)) {
       this.noteOff(midiNote);
     }
 
-    // Add to arpeggiator pool
     if (!this.arpHeldNotes.includes(midiNote)) {
       this.arpHeldNotes.push(midiNote);
       if (this.params.arpMode !== 'off' && !this.arpTimer) {
@@ -309,12 +356,11 @@ export class SynthEngine {
       }
     }
 
-    if (this.params.arpMode !== 'off') return; // Handled by arpeggiator clock
+    if (this.params.arpMode !== 'off') return;
 
     const freq = this.midiToFreq(midiNote);
     const now = this.ctx.currentTime;
 
-    // Osc 1
     const osc1 = this.ctx.createOscillator();
     osc1.type = this.params.osc1Wave;
     const osc1Freq = freq * Math.pow(2, this.params.osc1Octave + (this.params.osc1Semi / 12));
@@ -324,7 +370,6 @@ export class SynthEngine {
     osc1Gain.gain.value = this.params.osc1Gain;
     osc1.connect(osc1Gain);
 
-    // Osc 2
     const osc2 = this.ctx.createOscillator();
     osc2.type = this.params.osc2Wave;
     const osc2Freq = freq * Math.pow(2, this.params.osc2Octave + (this.params.osc2Semi / 12));
@@ -335,7 +380,6 @@ export class SynthEngine {
     osc2Gain.gain.value = this.params.osc2Gain;
     osc2.connect(osc2Gain);
 
-    // Sub Oscillator (Sine 1 octave down)
     const subOsc = this.ctx.createOscillator();
     subOsc.type = 'sine';
     subOsc.frequency.setValueAtTime(freq * 0.5, now);
@@ -343,7 +387,6 @@ export class SynthEngine {
     subGain.gain.value = this.params.subGain;
     subOsc.connect(subGain);
 
-    // 4-Pole Cascade Filter (2 x BiquadFilter in series for 24dB roll-off)
     const filter1 = this.ctx.createBiquadFilter();
     filter1.type = 'lowpass';
     filter1.Q.value = this.params.filterResonance;
@@ -352,13 +395,11 @@ export class SynthEngine {
     filter2.type = 'lowpass';
     filter2.Q.value = this.params.filterResonance * 0.7;
 
-    // Sum oscillators into filter
     osc1Gain.connect(filter1);
     osc2Gain.connect(filter1);
     subGain.connect(filter1);
     filter1.connect(filter2);
 
-    // Filter Envelope Modulation
     const baseCutoff = Math.max(20, Math.min(20000, this.params.filterCutoff));
     const peakCutoff = Math.max(20, Math.min(20000, baseCutoff + this.params.filterEnvAmount * velocity));
     const susCutoff = Math.max(20, Math.min(20000, baseCutoff + (this.params.filterEnvAmount * this.params.filterSustain * velocity)));
@@ -371,10 +412,8 @@ export class SynthEngine {
     filter2.frequency.linearRampToValueAtTime(peakCutoff, now + this.params.filterAttack);
     filter2.frequency.exponentialRampToValueAtTime(Math.max(20, susCutoff), now + this.params.filterAttack + this.params.filterDecay);
 
-    // Route LFO to filter frequency
     this.lfoGain.connect(filter1.frequency);
 
-    // VCA Amp Envelope
     const ampGain = this.ctx.createGain();
     ampGain.gain.setValueAtTime(0, now);
     ampGain.gain.linearRampToValueAtTime(velocity * 0.7, now + this.params.ampAttack);
@@ -430,35 +469,51 @@ export class SynthEngine {
     this.activeVoices.delete(midiNote);
   }
 
-  // Step Sequencer Playback Engine
-  startSequencer(onStepCallback) {
+  // Playback Control: Supports PAT (Pattern Loop) & SONG (16-Bar Playlist)
+  startPlayback(onTickCallback) {
     this.ensureContext();
     if (this.isPlaying) return;
 
     this.isPlaying = true;
     this.currentStep = 0;
-    const stepDurationMs = (60000 / this.bpm) / 4;
+    this.currentSongBar = 0;
+    const stepDurationMs = (60000 / this.bpm) / 4; // 16th note steps
 
     this.sequencerTimer = setInterval(() => {
-      this.triggerStep(this.currentStep);
-      if (onStepCallback) onStepCallback(this.currentStep);
-      this.currentStep = (this.currentStep + 1) % 16;
+      if (this.playMode === 'PAT') {
+        // Pattern Loop Mode
+        const pat = this.getActivePattern();
+        this.triggerPatternStep(pat, this.currentStep);
+        if (onTickCallback) onTickCallback({ mode: 'PAT', step: this.currentStep });
+        this.currentStep = (this.currentStep + 1) % 16;
+      } else {
+        // Song Playlist Mode
+        this.triggerSongStep(this.currentSongBar, this.currentStep);
+        if (onTickCallback) onTickCallback({ mode: 'SONG', bar: this.currentSongBar, step: this.currentStep });
+
+        this.currentStep++;
+        if (this.currentStep >= 16) {
+          this.currentStep = 0;
+          this.currentSongBar = (this.currentSongBar + 1) % this.totalBars;
+        }
+      }
     }, stepDurationMs);
   }
 
-  stopSequencer() {
+  stopPlayback() {
     if (this.sequencerTimer) {
       clearInterval(this.sequencerTimer);
       this.sequencerTimer = null;
     }
     this.isPlaying = false;
     this.currentStep = 0;
+    this.currentSongBar = 0;
   }
 
-  triggerStep(stepIndex) {
-    const hasSolo = this.channels.some(c => c.solo);
+  triggerPatternStep(pattern, stepIndex) {
+    const hasSolo = pattern.channels.some(c => c.solo);
 
-    this.channels.forEach(ch => {
+    pattern.channels.forEach(ch => {
       if (ch.mute) return;
       if (hasSolo && !ch.solo) return;
 
@@ -474,6 +529,22 @@ export class SynthEngine {
         } else if (ch.type === 'drum') {
           this.playDrumSample(ch.sample, ch.volume);
         }
+      }
+    });
+  }
+
+  // Song Mode Trigger: Evaluates active patterns placed on each Playlist Track for the current bar
+  triggerSongStep(barIndex, stepIndex) {
+    const activePatternIdsAtBar = new Set();
+    this.playlistTracks.forEach(track => {
+      const patId = track.bars[barIndex];
+      if (patId) activePatternIdsAtBar.add(patId);
+    });
+
+    activePatternIdsAtBar.forEach(patId => {
+      const pattern = this.patterns.find(p => p.id === patId);
+      if (pattern) {
+        this.triggerPatternStep(pattern, stepIndex);
       }
     });
   }
@@ -497,21 +568,24 @@ export class SynthEngine {
     return (parseInt(match[2], 10) + 1) * 12 + notes.indexOf(match[1]);
   }
 
+  // Expanded High-Definition Procedural Drum Synthesis (Kick, Snare, Hi-Hat, 808 Sub, Clap, Crash)
   createProceduralDrums() {
     const sr = this.ctx.sampleRate;
+
+    // 1. 909 Punch Kick
     const kickBuf = (() => {
       const len = Math.floor(0.35 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
       const d = b.getChannelData(0);
       for (let i = 0; i < len; i++) {
         const t = i / sr;
-        const f = 45 + 130 * Math.exp(-t * 30);
-        const env = Math.exp(-t * 10);
-        d[i] = Math.sin(2 * Math.PI * f * t) * env;
+        const f = 45 + 140 * Math.exp(-t * 30);
+        d[i] = Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 10);
       }
       return b;
     })();
 
+    // 2. 909 Studio Snare
     const snareBuf = (() => {
       const len = Math.floor(0.28 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
@@ -525,6 +599,7 @@ export class SynthEngine {
       return b;
     })();
 
+    // 3. Open 909 Hi-Hat
     const hihatBuf = (() => {
       const len = Math.floor(0.18 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
@@ -538,6 +613,49 @@ export class SynthEngine {
       return b;
     })();
 
-    return { kick: kickBuf, snare: snareBuf, hihat: hihatBuf };
+    // 4. 808 Sub-Bass Boom (Long resonant 38Hz decay)
+    const sub808Buf = (() => {
+      const len = Math.floor(0.85 * sr);
+      const b = this.ctx.createBuffer(1, len, sr);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        const f = 38 + 60 * Math.exp(-t * 20);
+        d[i] = Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 3.2);
+      }
+      return b;
+    })();
+
+    // 5. Analog Handclap
+    const clapBuf = (() => {
+      const len = Math.floor(0.24 * sr);
+      const b = this.ctx.createBuffer(1, len, sr);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        let burst = 0;
+        if (t < 0.012) burst = (Math.random() * 2 - 1) * 0.5;
+        else if (t < 0.024) burst = (Math.random() * 2 - 1) * 0.7;
+        else burst = (Math.random() * 2 - 1) * Math.exp(-(t - 0.024) * 18);
+        d[i] = burst * 0.8;
+      }
+      return b;
+    })();
+
+    // 6. Cymbal Crash
+    const crashBuf = (() => {
+      const len = Math.floor(1.2 * sr);
+      const b = this.ctx.createBuffer(1, len, sr);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        const noise = (Math.random() * 2 - 1);
+        const metal = (Math.sin(2 * Math.PI * 5200 * t) + Math.sin(2 * Math.PI * 7300 * t)) * 0.25;
+        d[i] = (noise * 0.75 + metal) * Math.exp(-t * 3.5);
+      }
+      return b;
+    })();
+
+    return { kick: kickBuf, snare: snareBuf, hihat: hihatBuf, sub808: sub808Buf, clap: clapBuf, crash: crashBuf };
   }
 }
