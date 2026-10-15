@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LocalSynth | Sovereign Web Synthesizer & FL Step Sequencer | LocalFilm Ireland</title>
-  <meta name="description" content="LocalSynth: Free, open-source in-browser virtual analog polyphonic synthesizer, acid bassline generator, and FL-style 16-step sequencer powered by Web Audio API.">
+  <meta name="description" content="LocalSynth: Free, open-source in-browser virtual analog polyphonic synthesizer, arpeggiator, acid bassline generator, and FL-style 16-step sequencer powered by Web Audio API.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f97316' stroke-width='2'><path d='M2 12h4l3-9 4 18 3-9h6'/></svg>">
   <link rel="stylesheet" href="./src/styles.css">
 </head>
@@ -18,13 +18,25 @@
       </svg>
       <div class="brand-titles">
         <div class="brand-title">
-          LOCALSYNTH <span class="brand-badge">PRO v1.0</span>
+          LOCALSYNTH <span class="brand-badge">PRO v1.2</span>
         </div>
         <div class="brand-subtitle">VIRTUAL ANALOG SYNTHESIZER & STEP SEQUENCER · LOCALFILM IRELAND</div>
       </div>
     </div>
 
-    <!-- Master Transport -->
+    <!-- Sound Preset Quick Selector -->
+    <div class="preset-selector-group">
+      <span class="preset-label">PATCH:</span>
+      <select id="synth-preset-dropdown" class="preset-dropdown">
+        <option value="init_saw">Classic Dual Saw Lead</option>
+        <option value="acid_303">TB-303 Acid Squelch</option>
+        <option value="blade_runner_brass">Blade Runner CS-80 Brass</option>
+        <option value="juno_pad">Juno-106 Ambient Pad</option>
+        <option value="fm_pluck">Retro 80s FM Pluck</option>
+      </select>
+    </div>
+
+    <!-- Master Transport & Arpeggiator Bar -->
     <div class="transport-bar">
       <button class="btn-transport" id="btn-seq-play">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -39,7 +51,19 @@
         <span>BPM</span>
       </div>
 
-      <button class="btn-transport" id="btn-randomize-acid" title="Randomize TB-303 Acid Bassline Pattern">
+      <!-- Arpeggiator Selector -->
+      <div class="arp-control-group">
+        <span>ARP:</span>
+        <select id="arp-mode-select" class="arp-select">
+          <option value="off">OFF</option>
+          <option value="up">UP</option>
+          <option value="down">DOWN</option>
+          <option value="updown">UP/DOWN</option>
+          <option value="random">RANDOM</option>
+        </select>
+      </div>
+
+      <button class="btn-transport btn-random-acid" id="btn-randomize-acid" title="Randomize TB-303 Acid Bassline Pattern">
         🎲 RANDOM ACID
       </button>
     </div>
@@ -47,19 +71,21 @@
 
   <!-- Main Synth Studio -->
   <main class="synth-studio">
-    <!-- Oscilloscope Display -->
-    <canvas id="oscilloscope" class="oscilloscope-canvas"></canvas>
+    <!-- Visualizer Bar: Oscilloscope & Level Meter -->
+    <div class="visualizer-container">
+      <canvas id="oscilloscope" class="oscilloscope-canvas"></canvas>
+    </div>
 
-    <!-- Virtual Hardware Rack Modules -->
+    <!-- Virtual Hardware Rack Modules (4 Columns) -->
     <section class="synth-rack">
-      <!-- Module 1: Oscillators -->
+      <!-- Module 1: Oscillators & Pitch Tuning -->
       <div class="rack-module">
         <div class="module-header">
-          <span class="module-title">1. OSCILLATORS</span>
+          <span class="module-title">1. DUAL OSCILLATORS</span>
         </div>
         <div class="module-knobs-grid">
           <div class="knob-unit">
-            <span class="knob-label">OSC 1 WAVE</span>
+            <span class="knob-label">OSC 1</span>
             <select id="osc1-wave" class="waveform-selector">
               <option value="sawtooth">SAW</option>
               <option value="square">SQUARE</option>
@@ -68,7 +94,7 @@
             </select>
           </div>
           <div class="knob-unit">
-            <span class="knob-label">OSC 2 WAVE</span>
+            <span class="knob-label">OSC 2</span>
             <select id="osc2-wave" class="waveform-selector">
               <option value="square">SQUARE</option>
               <option value="sawtooth">SAW</option>
@@ -85,10 +111,10 @@
         </div>
       </div>
 
-      <!-- Module 2: 24dB Resonant Filter -->
+      <!-- Module 2: 24dB Ladder Lowpass Filter -->
       <div class="rack-module">
         <div class="module-header">
-          <span class="module-title">2. LADDER FILTER</span>
+          <span class="module-title">2. LADDER FILTER (24dB)</span>
         </div>
         <div class="module-knobs-grid">
           <div class="knob-unit">
@@ -104,7 +130,7 @@
             </div>
           </div>
           <div class="knob-unit">
-            <span class="knob-label">ENV AMOUNT</span>
+            <span class="knob-label">ENV MOD</span>
             <div class="rotary-knob" id="knob-filter-env" data-param="filterEnvAmount">
               <div class="rotary-knob-pointer"></div>
             </div>
@@ -115,7 +141,7 @@
       <!-- Module 3: Amp Envelope (ADSR) -->
       <div class="rack-module">
         <div class="module-header">
-          <span class="module-title">3. AMP ENVELOPE</span>
+          <span class="module-title">3. AMP ENVELOPE (ADSR)</span>
         </div>
         <div class="module-knobs-grid">
           <div class="knob-unit">
@@ -139,14 +165,14 @@
         </div>
       </div>
 
-      <!-- Module 4: Delay & Space FX -->
+      <!-- Module 4: Delay, Distortion & Space Bus -->
       <div class="rack-module">
         <div class="module-header">
-          <span class="module-title">4. EFFECTS BUS</span>
+          <span class="module-title">4. FX BUS & SPACE</span>
         </div>
         <div class="module-knobs-grid">
           <div class="knob-unit">
-            <span class="knob-label">TIME</span>
+            <span class="knob-label">DELAY TIME</span>
             <div class="rotary-knob" id="knob-fx-delay-time" data-param="delayTime">
               <div class="rotary-knob-pointer"></div>
             </div>
@@ -158,8 +184,8 @@
             </div>
           </div>
           <div class="knob-unit">
-            <span class="knob-label">MIX</span>
-            <div class="rotary-knob" id="knob-fx-mix" data-param="delayMix">
+            <span class="knob-label">DRIVE</span>
+            <div class="rotary-knob" id="knob-fx-drive" data-param="distDrive">
               <div class="rotary-knob-pointer"></div>
             </div>
           </div>
@@ -167,23 +193,25 @@
       </div>
     </section>
 
-    <!-- FL Studio 16-Step Pattern Sequencer -->
+    <!-- FL Studio 16-Step Pattern Sequencer with Mute/Solo & Volume -->
     <section class="sequencer-panel">
       <div class="sequencer-header">
-        <span class="sequencer-title">FL PATTERN SEQUENCER (16 STEPS)</span>
-        <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">CLICK TO TOGGLE STEPS</span>
+        <div class="seq-title-group">
+          <span class="sequencer-title">FL PATTERN SEQUENCER (16 STEPS)</span>
+          <span class="seq-hint">CLICK TO TOGGLE STEPS · [M] MUTE · [S] SOLO</span>
+        </div>
       </div>
 
       <div class="step-channels-container" id="step-channels-container">
-        <!-- Dynamically generated channel rows with 16 buttons each -->
+        <!-- Dynamically generated channel rows -->
       </div>
     </section>
 
     <!-- Interactive Piano Roll Keyboard -->
     <section class="piano-keyboard-panel">
       <div class="sequencer-header">
-        <span class="sequencer-title">POLYPHONIC KEYBOARD (2 OCTAVES)</span>
-        <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">PLAY WITH MOUSE OR COMPUTER KEYS (A-W-S-E-D-F...)</span>
+        <span class="sequencer-title">POLYPHONIC KEYBOARD (C3 – C5)</span>
+        <span class="seq-hint">MOUSE CLICK OR COMPUTER KEYBOARD (A, W, S, E, D, F, G...)</span>
       </div>
 
       <div class="keyboard-container" id="keyboard-container">

@@ -1,10 +1,10 @@
 :root {
-  --bg-dark: #080a0e;
-  --bg-surface: #101319;
-  --bg-panel: #161a22;
-  --bg-panel-elevated: #1e2430;
-  --border-color: #272e3c;
-  --border-subtle: #191f2b;
+  --bg-dark: #07090d;
+  --bg-surface: #0f1218;
+  --bg-panel: #151922;
+  --bg-panel-elevated: #1d2330;
+  --border-color: #262e3d;
+  --border-subtle: #181e28;
   --text-main: #f1f5f9;
   --text-muted: #8b99ae;
   --accent-orange: #f97316;
@@ -12,6 +12,7 @@
   --accent-cyan: #06b6d4;
   --accent-blue: #38bdf8;
   --accent-emerald: #10b981;
+  --accent-red: #ef4444;
   --step-active: #f97316;
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -45,6 +46,7 @@ header.app-header {
   justify-content: space-between;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
   z-index: 10;
+  gap: 16px;
 }
 
 .brand-section {
@@ -92,6 +94,36 @@ header.app-header {
   color: var(--text-muted);
 }
 
+/* Preset Dropdown Bar */
+.preset-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #090c12;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.preset-label {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--accent-orange);
+  letter-spacing: 1px;
+}
+
+.preset-dropdown {
+  background: #141822;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
 /* Transport Bar */
 .transport-bar {
   display: flex;
@@ -134,12 +166,12 @@ header.app-header {
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
 .bpm-input {
-  width: 54px;
+  width: 52px;
   background: #000;
   border: 1px solid var(--border-color);
   color: var(--accent-orange);
@@ -152,16 +184,57 @@ header.app-header {
   outline: none;
 }
 
+.arp-control-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.arp-select {
+  background: #090c12;
+  border: 1px solid var(--border-color);
+  color: var(--accent-cyan);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.btn-random-acid {
+  background: #1e2430;
+  color: var(--accent-amber);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
 /* Main Studio Layout */
 main.synth-studio {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 18px 24px;
   max-width: 1720px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* Oscilloscope Display */
+.visualizer-container {
+  width: 100%;
+}
+
+.oscilloscope-canvas {
+  width: 100%;
+  height: 55px;
+  background: #040508;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  display: block;
 }
 
 /* Synth Hardware Rack Modules */
@@ -274,11 +347,23 @@ main.synth-studio {
   padding-bottom: 8px;
 }
 
+.seq-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .sequencer-title {
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 1.5px;
   color: var(--accent-orange);
+}
+
+.seq-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 700;
 }
 
 .step-channels-container {
@@ -289,7 +374,7 @@ main.synth-studio {
 
 .channel-row {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 240px 1fr;
   gap: 12px;
   align-items: center;
   background: #0d1017;
@@ -302,6 +387,28 @@ main.synth-studio {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.channel-btn-mute, .channel-btn-solo {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+  font-weight: 800;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: #1a202c;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.channel-btn-mute.active { background: var(--accent-red); color: #fff; border-color: #f87171; }
+.channel-btn-solo.active { background: var(--accent-amber); color: #000; border-color: #fde047; }
+
+.channel-vol-slider {
+  width: 50px;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent-orange);
 }
 
 .channel-name {
@@ -326,7 +433,6 @@ main.synth-studio {
   transition: all 0.1s ease;
 }
 
-/* FL 4-beat color grouping */
 .step-btn:nth-child(4n+1),
 .step-btn:nth-child(4n+2),
 .step-btn:nth-child(4n+3),
@@ -350,7 +456,7 @@ main.synth-studio {
   box-shadow: 0 0 8px #fff;
 }
 
-/* Piano Roll Interactive Keyboard */
+/* Piano Keyboard */
 .piano-keyboard-panel {
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
@@ -398,16 +504,6 @@ main.synth-studio {
 
 .key-black:hover { background: #222; }
 .key-black.active { background: var(--accent-orange) !important; box-shadow: 0 0 12px var(--accent-orange); }
-
-/* Master Visualizer & Oscilloscope */
-.oscilloscope-canvas {
-  width: 100%;
-  height: 60px;
-  background: #05070a;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  display: block;
-}
 
 /* Footer */
 footer.app-footer {

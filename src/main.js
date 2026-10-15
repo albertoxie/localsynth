@@ -2,7 +2,7 @@ import { SynthEngine } from './synthEngine.js';
 
 const synth = new SynthEngine();
 
-// Render Step Sequencer Channels
+// Render Step Sequencer Channels with Mute/Solo & Volume
 function initSequencerUI() {
   const container = document.getElementById('step-channels-container');
   container.innerHTML = '';
@@ -14,8 +14,29 @@ function initSequencerUI() {
     const info = document.createElement('div');
     info.className = 'channel-info';
     info.innerHTML = `
+      <button class="channel-btn-mute ${ch.mute ? 'active' : ''}" data-ch="${chIdx}" title="Mute Channel">M</button>
+      <button class="channel-btn-solo ${ch.solo ? 'active' : ''}" data-ch="${chIdx}" title="Solo Channel">S</button>
+      <input type="range" class="channel-vol-slider" min="0" max="1" step="0.05" value="${ch.volume}" data-ch="${chIdx}" title="Channel Volume">
       <span class="channel-name">${ch.name}</span>
     `;
+
+    // Mute listener
+    info.querySelector('.channel-btn-mute').addEventListener('click', (e) => {
+      ch.mute = !ch.mute;
+      e.target.classList.toggle('active', ch.mute);
+    });
+
+    // Solo listener
+    info.querySelector('.channel-btn-solo').addEventListener('click', (e) => {
+      ch.solo = !ch.solo;
+      e.target.classList.toggle('active', ch.solo);
+    });
+
+    // Volume slider listener
+    info.querySelector('.channel-vol-slider').addEventListener('input', (e) => {
+      ch.volume = parseFloat(e.target.value);
+    });
+
     row.appendChild(info);
 
     const stepsGrid = document.createElement('div');
@@ -45,9 +66,7 @@ function initKeyboardUI() {
   const container = document.getElementById('keyboard-container');
   container.innerHTML = '';
 
-  // Notes C3 (48) to C5 (72)
   const startMidi = 48;
-  const numWhiteKeys = 15;
   const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
   const whiteKeys = [];
@@ -63,8 +82,8 @@ function initKeyboardUI() {
     }
   }
 
-  // Render White Keys
-  whiteKeys.forEach((k, idx) => {
+  // White Keys
+  whiteKeys.forEach((k) => {
     const key = document.createElement('div');
     key.className = 'key-white';
     key.dataset.midi = k.midi;
@@ -87,13 +106,12 @@ function initKeyboardUI() {
     container.appendChild(key);
   });
 
-  // Render Black Keys with precise alignment
+  // Black Keys
   const whiteKeyWidthPercent = 100 / whiteKeys.length;
   blackKeys.forEach((k) => {
     const key = document.createElement('div');
     key.className = 'key-black';
     key.dataset.midi = k.midi;
-    // Position between white keys
     const leftPercent = (k.prevWhiteIndex + 1) * whiteKeyWidthPercent - 1.6;
     key.style.left = `${leftPercent}%`;
 
@@ -115,7 +133,7 @@ function initKeyboardUI() {
     container.appendChild(key);
   });
 
-  // Computer Keyboard mapping (ASDF...)
+  // Computer Keyboard mapping
   const keyMap = {
     'a': 48, 'w': 49, 's': 50, 'e': 51, 'd': 52, 'f': 53, 't': 54,
     'g': 55, 'y': 56, 'h': 57, 'u': 58, 'j': 59, 'k': 60, 'o': 61, 'l': 62
@@ -123,7 +141,7 @@ function initKeyboardUI() {
 
   const activeKeyMap = new Set();
   window.addEventListener('keydown', (e) => {
-    if (e.repeat || e.target.tagName === 'INPUT') return;
+    if (e.repeat || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     const midi = keyMap[e.key.toLowerCase()];
     if (midi && !activeKeyMap.has(midi)) {
       activeKeyMap.add(midi);
@@ -144,7 +162,7 @@ function initKeyboardUI() {
   });
 }
 
-// Knob Interactions
+// Rotary Knobs & Parameter Binding
 function initKnobs() {
   const knobs = document.querySelectorAll('.rotary-knob');
   knobs.forEach((knob) => {
@@ -174,16 +192,14 @@ function initKnobs() {
       } else if (param === 'delayFeedback') {
         currentVal = Math.max(0, Math.min(0.85, currentVal + deltaY * 0.01));
         synth.delayFeedbackNode.gain.value = currentVal;
-      } else if (param === 'delayMix') {
+      } else if (param === 'distDrive') {
         currentVal = Math.max(0, Math.min(1.0, currentVal + deltaY * 0.01));
-        synth.delayGain.gain.value = currentVal;
+        synth.setDistortion(currentVal);
       } else {
         currentVal = Math.max(0.01, Math.min(2.0, currentVal + deltaY * 0.01));
         synth.params[param] = currentVal;
       }
 
-      // Visual angle
-      const angle = (deltaY * 2) % 360;
       knob.style.transform = `rotate(${deltaY * 3}deg)`;
     };
 
@@ -199,7 +215,6 @@ function initKnobs() {
     });
   });
 
-  // Waveform dropdowns
   document.getElementById('osc1-wave').addEventListener('change', (e) => {
     synth.params.osc1Wave = e.target.value;
   });
@@ -207,9 +222,26 @@ function initKnobs() {
   document.getElementById('osc2-wave').addEventListener('change', (e) => {
     synth.params.osc2Wave = e.target.value;
   });
+
+  // Presets Dropdown
+  document.getElementById('synth-preset-dropdown').addEventListener('change', (e) => {
+    const p = synth.loadPreset(e.target.value);
+    if (p) {
+      document.getElementById('osc1-wave').value = p.params.osc1Wave;
+      document.getElementById('osc2-wave').value = p.params.osc2Wave;
+    }
+  });
+
+  // Arpeggiator Dropdown
+  document.getElementById('arp-mode-select').addEventListener('change', (e) => {
+    synth.params.arpMode = e.target.value;
+    if (e.target.value === 'off') {
+      synth.stopArpeggiator();
+    }
+  });
 }
 
-// Transport & Sequencer
+// Transport & Sequencer Loop
 function initTransport() {
   const playBtn = document.getElementById('btn-seq-play');
   const playText = document.getElementById('play-text');
@@ -224,7 +256,6 @@ function initTransport() {
   });
 
   const handleStepTick = (stepIdx) => {
-    // Tick UI column
     document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
     document.querySelectorAll(`.step-btn[data-step="${stepIdx}"]`).forEach(b => b.classList.add('current-step-tick'));
   };
@@ -268,13 +299,13 @@ function startOscilloscope() {
 
     synth.masterAnalyser.getByteTimeDomainData(buffer);
 
-    ctx.fillStyle = '#080a0e';
+    ctx.fillStyle = '#07090d';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
     ctx.strokeStyle = '#f97316';
     ctx.shadowColor = '#f97316';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     ctx.beginPath();
 
     const sliceWidth = canvas.width / buffer.length;
@@ -300,7 +331,7 @@ function startOscilloscope() {
   requestAnimationFrame(draw);
 }
 
-// Launch
+// Boot System
 window.addEventListener('DOMContentLoaded', () => {
   initSequencerUI();
   initKeyboardUI();

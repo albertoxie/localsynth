@@ -13,7 +13,7 @@ export class SynthEngine {
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 512;
 
-    // Master Delay & Reverb Effects Bus
+    // Master Delay, Chorus & Distortion Bus
     this.initMasterEffects();
 
     this.masterGain.connect(this.masterAnalyser);
@@ -33,8 +33,8 @@ export class SynthEngine {
       // Osc 2
       osc2Wave: 'square',
       osc2Octave: -1,
-      osc2Semi: 7, // 5th interval by default
-      osc2Detune: 8, // subtle chorused thickness
+      osc2Semi: 7, // 5th interval
+      osc2Detune: 8,
       osc2Gain: 0.5,
 
       // Sub Osc & Noise
@@ -70,8 +70,18 @@ export class SynthEngine {
       delayFeedback: 0.35,
       delayMix: 0.25,
       distDrive: 0.0,
-      reverbMix: 0.2
+      reverbMix: 0.2,
+
+      // Arpeggiator
+      arpMode: 'off', // 'off', 'up', 'down', 'updown', 'random'
+      arpRate: '1/16',
+      arpOctaves: 2
     };
+
+    // Arpeggiator State
+    this.arpHeldNotes = [];
+    this.arpTimer = null;
+    this.arpStep = 0;
 
     // Global LFO Node
     this.lfo = this.ctx.createOscillator();
@@ -87,15 +97,18 @@ export class SynthEngine {
     this.currentStep = 0;
     this.sequencerTimer = null;
     this.channels = [
-      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', steps: [1,0,0,0, 1,0,1,0, 1,0,0,0, 1,1,0,0] },
-      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', steps: [1,0,1,0, 1,0,1,0, 1,0,1,1, 1,0,1,0] },
-      { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', steps: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0] },
-      { id: 'drum_snare', name: 'Studio Snare / Clap', type: 'drum', sample: 'snare', steps: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0] },
-      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', steps: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] }
+      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', volume: 0.85, mute: false, solo: false, steps: [1,0,0,0, 1,0,1,0, 1,0,0,0, 1,1,0,0] },
+      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', volume: 0.9, mute: false, solo: false, steps: [1,0,1,0, 1,0,1,0, 1,0,1,1, 1,0,1,0] },
+      { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0] },
+      { id: 'drum_snare', name: 'Studio Snare / Clap', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0] },
+      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] }
     ];
 
     // Procedural Drum Sample Buffers
     this.drumBuffers = this.createProceduralDrums();
+
+    // Sound Presets Library
+    this.presets = this.createPresetLibrary();
   }
 
   ensureContext() {
@@ -137,10 +150,138 @@ export class SynthEngine {
     return curve;
   }
 
+  setDistortion(driveAmount) {
+    this.params.distDrive = driveAmount;
+    this.distNode.curve = this.makeDistortionCurve(driveAmount * 100);
+  }
+
+  // Presets Library
+  createPresetLibrary() {
+    return [
+      {
+        id: 'init_saw',
+        name: 'Classic Dual Saw Lead',
+        category: 'Lead',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: 0, osc1Semi: 0, osc1Gain: 0.7,
+          osc2Wave: 'sawtooth', osc2Octave: 0, osc2Semi: 0, osc2Detune: 12, osc2Gain: 0.6,
+          subGain: 0.3, filterCutoff: 2800, filterResonance: 3.5, filterEnvAmount: 3200,
+          ampAttack: 0.01, ampDecay: 0.3, ampSustain: 0.7, ampRelease: 0.25,
+          delayTime: 0.25, delayFeedback: 0.4, delayMix: 0.3
+        }
+      },
+      {
+        id: 'acid_303',
+        name: 'TB-303 Acid Squelch',
+        category: 'Bass',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: -1, osc1Semi: 0, osc1Gain: 0.85,
+          osc2Wave: 'square', osc2Octave: -1, osc2Semi: 0, osc2Detune: 0, osc2Gain: 0.0,
+          subGain: 0.5, filterCutoff: 650, filterResonance: 9.5, filterEnvAmount: 4800,
+          ampAttack: 0.01, ampDecay: 0.2, ampSustain: 0.05, ampRelease: 0.15,
+          delayTime: 0.3, delayFeedback: 0.45, delayMix: 0.2
+        }
+      },
+      {
+        id: 'blade_runner_brass',
+        name: 'Blade Runner CS-80 Brass',
+        category: 'Synth Brass',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: 0, osc1Semi: 0, osc1Gain: 0.75,
+          osc2Wave: 'sawtooth', osc2Octave: 0, osc2Semi: 0, osc2Detune: 18, osc2Gain: 0.75,
+          subGain: 0.2, filterCutoff: 1200, filterResonance: 2.0, filterEnvAmount: 3500,
+          ampAttack: 0.18, ampDecay: 0.6, ampSustain: 0.85, ampRelease: 0.75,
+          delayTime: 0.4, delayFeedback: 0.5, delayMix: 0.4
+        }
+      },
+      {
+        id: 'juno_pad',
+        name: 'Juno-106 Ambient Pad',
+        category: 'Pad',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: 0, osc1Semi: 0, osc1Gain: 0.6,
+          osc2Wave: 'square', osc2Octave: 0, osc2Semi: 7, osc2Detune: 15, osc2Gain: 0.5,
+          subGain: 0.4, filterCutoff: 950, filterResonance: 1.8, filterEnvAmount: 1800,
+          ampAttack: 0.45, ampDecay: 0.8, ampSustain: 0.9, ampRelease: 0.95,
+          delayTime: 0.35, delayFeedback: 0.55, delayMix: 0.45
+        }
+      },
+      {
+        id: 'fm_pluck',
+        name: 'Retro 80s FM Pluck',
+        category: 'Pluck',
+        params: {
+          osc1Wave: 'triangle', osc1Octave: 1, osc1Semi: 0, osc1Gain: 0.8,
+          osc2Wave: 'sine', osc2Octave: 2, osc2Semi: 7, osc2Detune: 5, osc2Gain: 0.6,
+          subGain: 0.1, filterCutoff: 3800, filterResonance: 4.0, filterEnvAmount: 2200,
+          ampAttack: 0.005, ampDecay: 0.18, ampSustain: 0.0, ampRelease: 0.15,
+          delayTime: 0.2, delayFeedback: 0.3, delayMix: 0.25
+        }
+      }
+    ];
+  }
+
+  loadPreset(presetId) {
+    const p = this.presets.find(x => x.id === presetId);
+    if (!p) return;
+    Object.assign(this.params, p.params);
+    if (this.delayNode) {
+      this.delayNode.delayTime.value = this.params.delayTime;
+      this.delayFeedbackNode.gain.value = this.params.delayFeedback;
+      this.delayGain.gain.value = this.params.delayMix;
+    }
+    return p;
+  }
+
+  // Arpeggiator Handling
+  startArpeggiator() {
+    if (this.arpTimer) clearInterval(this.arpTimer);
+    if (this.params.arpMode === 'off') return;
+
+    const rateMap = { '1/8': 30000 / this.bpm, '1/16': 15000 / this.bpm, '1/32': 7500 / this.bpm };
+    const stepMs = rateMap[this.params.arpRate] || (15000 / this.bpm);
+
+    this.arpTimer = setInterval(() => {
+      if (this.arpHeldNotes.length === 0) return;
+
+      let notes = [...this.arpHeldNotes].sort((a, b) => a - b);
+      if (this.params.arpOctaves > 1) {
+        const expanded = [];
+        for (let oct = 0; oct < this.params.arpOctaves; oct++) {
+          notes.forEach(n => expanded.push(n + (oct * 12)));
+        }
+        notes = expanded;
+      }
+
+      let noteToPlay = notes[0];
+      if (this.params.arpMode === 'up') {
+        noteToPlay = notes[this.arpStep % notes.length];
+      } else if (this.params.arpMode === 'down') {
+        noteToPlay = notes[(notes.length - 1) - (this.arpStep % notes.length)];
+      } else if (this.params.arpMode === 'updown') {
+        const cycle = notes.concat([...notes].reverse().slice(1, -1));
+        noteToPlay = cycle[this.arpStep % cycle.length];
+      } else if (this.params.arpMode === 'random') {
+        noteToPlay = notes[Math.floor(Math.random() * notes.length)];
+      }
+
+      this.noteOn(noteToPlay, 0.95);
+      setTimeout(() => this.noteOff(noteToPlay), stepMs * 0.7);
+      this.arpStep++;
+    }, stepMs);
+  }
+
+  stopArpeggiator() {
+    if (this.arpTimer) {
+      clearInterval(this.arpTimer);
+      this.arpTimer = null;
+    }
+    this.arpStep = 0;
+  }
+
   noteToFreq(noteStr) {
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const regex = /([A-G]#?)([0-8])/;
-    const match = noteStr.match(regex);
+    const match = noteStr.match(/([A-G]#?)([0-8])/);
     if (!match) return 440;
     const note = match[1];
     const octave = parseInt(match[2], 10);
@@ -159,6 +300,16 @@ export class SynthEngine {
     if (this.activeVoices.has(midiNote)) {
       this.noteOff(midiNote);
     }
+
+    // Add to arpeggiator pool
+    if (!this.arpHeldNotes.includes(midiNote)) {
+      this.arpHeldNotes.push(midiNote);
+      if (this.params.arpMode !== 'off' && !this.arpTimer) {
+        this.startArpeggiator();
+      }
+    }
+
+    if (this.params.arpMode !== 'off') return; // Handled by arpeggiator clock
 
     const freq = this.midiToFreq(midiNote);
     const now = this.ctx.currentTime;
@@ -231,7 +382,7 @@ export class SynthEngine {
 
     filter2.connect(ampGain);
     ampGain.connect(this.masterGain);
-    ampGain.connect(this.delayNode); // Send to Delay
+    ampGain.connect(this.delayNode);
 
     osc1.start(now);
     osc2.start(now);
@@ -246,18 +397,21 @@ export class SynthEngine {
   }
 
   noteOff(midiNote) {
+    this.arpHeldNotes = this.arpHeldNotes.filter(n => n !== midiNote);
+    if (this.arpHeldNotes.length === 0 && this.params.arpMode !== 'off') {
+      this.stopArpeggiator();
+    }
+
     const voice = this.activeVoices.get(midiNote);
     if (!voice) return;
 
     const now = this.ctx.currentTime;
     const releaseTime = Math.max(0.05, this.params.ampRelease);
 
-    // Release Amp
     voice.ampGain.gain.cancelScheduledValues(now);
     voice.ampGain.gain.setValueAtTime(voice.ampGain.gain.value, now);
     voice.ampGain.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
 
-    // Release Filter
     voice.filter1.frequency.cancelScheduledValues(now);
     voice.filter1.frequency.exponentialRampToValueAtTime(Math.max(20, this.params.filterCutoff), now + this.params.filterRelease);
 
@@ -283,7 +437,7 @@ export class SynthEngine {
 
     this.isPlaying = true;
     this.currentStep = 0;
-    const stepDurationMs = (60000 / this.bpm) / 4; // 16th note steps
+    const stepDurationMs = (60000 / this.bpm) / 4;
 
     this.sequencerTimer = setInterval(() => {
       this.triggerStep(this.currentStep);
@@ -302,31 +456,35 @@ export class SynthEngine {
   }
 
   triggerStep(stepIndex) {
+    const hasSolo = this.channels.some(c => c.solo);
+
     this.channels.forEach(ch => {
+      if (ch.mute) return;
+      if (hasSolo && !ch.solo) return;
+
       if (ch.steps[stepIndex] === 1) {
         if (ch.type === 'synth') {
           const midi = this.noteToMidi(ch.note);
-          this.noteOn(midi, 0.9);
+          this.noteOn(midi, ch.volume || 0.9);
           setTimeout(() => this.noteOff(midi), 120);
         } else if (ch.type === 'bass') {
-          // Acid Bassline
           const midi = this.noteToMidi(ch.note);
-          this.noteOn(midi, 1.0);
+          this.noteOn(midi, ch.volume || 1.0);
           setTimeout(() => this.noteOff(midi), 140);
         } else if (ch.type === 'drum') {
-          this.playDrumSample(ch.sample);
+          this.playDrumSample(ch.sample, ch.volume);
         }
       }
     });
   }
 
-  playDrumSample(sampleName) {
+  playDrumSample(sampleName, volume = 1.0) {
     const buf = this.drumBuffers[sampleName];
     if (!buf) return;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.95;
+    gain.gain.value = volume;
     src.connect(gain);
     gain.connect(this.masterGain);
     src.start();
@@ -341,7 +499,6 @@ export class SynthEngine {
 
   createProceduralDrums() {
     const sr = this.ctx.sampleRate;
-    // Kick
     const kickBuf = (() => {
       const len = Math.floor(0.35 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
@@ -355,7 +512,6 @@ export class SynthEngine {
       return b;
     })();
 
-    // Snare
     const snareBuf = (() => {
       const len = Math.floor(0.28 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
@@ -369,7 +525,6 @@ export class SynthEngine {
       return b;
     })();
 
-    // HiHat
     const hihatBuf = (() => {
       const len = Math.floor(0.18 * sr);
       const b = this.ctx.createBuffer(1, len, sr);
