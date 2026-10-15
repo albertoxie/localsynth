@@ -1,0 +1,436 @@
+:root {
+  --bg-dark: #080a0e;
+  --bg-surface: #101319;
+  --bg-panel: #161a22;
+  --bg-panel-elevated: #1e2430;
+  --border-color: #272e3c;
+  --border-subtle: #191f2b;
+  --text-main: #f1f5f9;
+  --text-muted: #8b99ae;
+  --accent-orange: #f97316;
+  --accent-amber: #f59e0b;
+  --accent-cyan: #06b6d4;
+  --accent-blue: #38bdf8;
+  --accent-emerald: #10b981;
+  --step-active: #f97316;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* Header */
+header.app-header {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  z-index: 10;
+}
+
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-icon-synth {
+  width: 32px;
+  height: 32px;
+  stroke: var(--accent-orange);
+  fill: none;
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  color: var(--accent-orange);
+}
+
+.brand-subtitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+/* Transport Bar */
+.transport-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0d1017;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-transport {
+  background: var(--bg-panel-elevated);
+  border: 1px solid var(--border-color);
+  color: #fff;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-transport:hover {
+  background: var(--border-color);
+}
+
+.btn-transport.playing {
+  background: var(--accent-orange);
+  border-color: #fb923c;
+  color: #000;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.5);
+}
+
+.bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bpm-input {
+  width: 54px;
+  background: #000;
+  border: 1px solid var(--border-color);
+  color: var(--accent-orange);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-align: center;
+  outline: none;
+}
+
+/* Main Studio Layout */
+main.synth-studio {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 1720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Synth Hardware Rack Modules */
+.synth-rack {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.rack-module {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.module-title {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent-orange);
+}
+
+.module-knobs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.knob-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.knob-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.rotary-knob {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #252d3a 0%, #151a24 100%);
+  border: 2px solid #333d4e;
+  position: relative;
+  cursor: ns-resize;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+.rotary-knob-pointer {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 12px;
+  background: var(--accent-orange);
+  border-radius: 2px;
+}
+
+.waveform-selector {
+  width: 100%;
+  background: #090c12;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* FL Studio Step Sequencer Grid */
+.sequencer-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.sequencer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.sequencer-title {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--accent-orange);
+}
+
+.step-channels-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.channel-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  align-items: center;
+  background: #0d1017;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.channel-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 6px;
+}
+
+.step-btn {
+  height: 32px;
+  background: #181d28;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+/* FL 4-beat color grouping */
+.step-btn:nth-child(4n+1),
+.step-btn:nth-child(4n+2),
+.step-btn:nth-child(4n+3),
+.step-btn:nth-child(4n+4) {
+  background: #151922;
+}
+
+.step-btn:nth-child(n+5):nth-child(-n+8),
+.step-btn:nth-child(n+13):nth-child(-n+16) {
+  background: #202634;
+}
+
+.step-btn.active {
+  background: var(--accent-orange) !important;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.8);
+  border-color: #fb923c;
+}
+
+.step-btn.current-step-tick {
+  border-color: #fff !important;
+  box-shadow: 0 0 8px #fff;
+}
+
+/* Piano Roll Interactive Keyboard */
+.piano-keyboard-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.keyboard-container {
+  display: flex;
+  position: relative;
+  height: 120px;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.key-white {
+  flex: 1;
+  background: #e2e8f0;
+  border-right: 1px solid #94a3b8;
+  cursor: pointer;
+  border-radius: 0 0 4px 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.key-white:hover { background: #f8fafc; }
+.key-white.active { background: var(--accent-orange) !important; box-shadow: 0 0 12px var(--accent-orange); }
+
+.key-black {
+  position: absolute;
+  width: 3.2%;
+  height: 65%;
+  background: #111;
+  border-radius: 0 0 3px 3px;
+  z-index: 2;
+  cursor: pointer;
+  border: 1px solid #000;
+}
+
+.key-black:hover { background: #222; }
+.key-black.active { background: var(--accent-orange) !important; box-shadow: 0 0 12px var(--accent-orange); }
+
+/* Master Visualizer & Oscilloscope */
+.oscilloscope-canvas {
+  width: 100%;
+  height: 60px;
+  background: #05070a;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  display: block;
+}
+
+/* Footer */
+footer.app-footer {
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-color);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.footer-links {
+  display: flex;
+  gap: 16px;
+}
+
+.footer-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--accent-orange);
+}

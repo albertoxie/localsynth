@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LocalSynth | Sovereign Web Synthesizer & FL Step Sequencer | LocalFilm Ireland</title>
+  <meta name="description" content="LocalSynth: Free, open-source in-browser virtual analog polyphonic synthesizer, acid bassline generator, and FL-style 16-step sequencer powered by Web Audio API.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f97316' stroke-width='2'><path d='M2 12h4l3-9 4 18 3-9h6'/></svg>">
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <!-- Header & Transport -->
+  <header class="app-header">
+    <div class="brand-section">
+      <svg class="brand-icon-synth" viewBox="0 0 24 24">
+        <path d="M2 12h3l3-8 4 16 3-8h5" stroke-width="2.5"/>
+        <circle cx="20" cy="12" r="2" fill="currentColor"/>
+      </svg>
+      <div class="brand-titles">
+        <div class="brand-title">
+          LOCALSYNTH <span class="brand-badge">PRO v1.0</span>
+        </div>
+        <div class="brand-subtitle">VIRTUAL ANALOG SYNTHESIZER & STEP SEQUENCER · LOCALFILM IRELAND</div>
+      </div>
+    </div>
+
+    <!-- Master Transport -->
+    <div class="transport-bar">
+      <button class="btn-transport" id="btn-seq-play">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span id="play-text">PLAY PATTERN</span>
+      </button>
+
+      <div class="bpm-control">
+        <span>TEMPO</span>
+        <input type="number" id="seq-bpm" class="bpm-input" min="60" max="220" value="128">
+        <span>BPM</span>
+      </div>
+
+      <button class="btn-transport" id="btn-randomize-acid" title="Randomize TB-303 Acid Bassline Pattern">
+        🎲 RANDOM ACID
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Synth Studio -->
+  <main class="synth-studio">
+    <!-- Oscilloscope Display -->
+    <canvas id="oscilloscope" class="oscilloscope-canvas"></canvas>
+
+    <!-- Virtual Hardware Rack Modules -->
+    <section class="synth-rack">
+      <!-- Module 1: Oscillators -->
+      <div class="rack-module">
+        <div class="module-header">
+          <span class="module-title">1. OSCILLATORS</span>
+        </div>
+        <div class="module-knobs-grid">
+          <div class="knob-unit">
+            <span class="knob-label">OSC 1 WAVE</span>
+            <select id="osc1-wave" class="waveform-selector">
+              <option value="sawtooth">SAW</option>
+              <option value="square">SQUARE</option>
+              <option value="triangle">TRI</option>
+              <option value="sine">SINE</option>
+            </select>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">OSC 2 WAVE</span>
+            <select id="osc2-wave" class="waveform-selector">
+              <option value="square">SQUARE</option>
+              <option value="sawtooth">SAW</option>
+              <option value="triangle">TRI</option>
+              <option value="sine">SINE</option>
+            </select>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">DETUNE</span>
+            <div class="rotary-knob" id="knob-osc2-detune" data-param="osc2Detune">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 2: 24dB Resonant Filter -->
+      <div class="rack-module">
+        <div class="module-header">
+          <span class="module-title">2. LADDER FILTER</span>
+        </div>
+        <div class="module-knobs-grid">
+          <div class="knob-unit">
+            <span class="knob-label">CUTOFF</span>
+            <div class="rotary-knob" id="knob-filter-cutoff" data-param="filterCutoff">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">RESONANCE</span>
+            <div class="rotary-knob" id="knob-filter-res" data-param="filterResonance">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">ENV AMOUNT</span>
+            <div class="rotary-knob" id="knob-filter-env" data-param="filterEnvAmount">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 3: Amp Envelope (ADSR) -->
+      <div class="rack-module">
+        <div class="module-header">
+          <span class="module-title">3. AMP ENVELOPE</span>
+        </div>
+        <div class="module-knobs-grid">
+          <div class="knob-unit">
+            <span class="knob-label">ATTACK</span>
+            <div class="rotary-knob" id="knob-amp-attack" data-param="ampAttack">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">DECAY</span>
+            <div class="rotary-knob" id="knob-amp-decay" data-param="ampDecay">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">RELEASE</span>
+            <div class="rotary-knob" id="knob-amp-release" data-param="ampRelease">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 4: Delay & Space FX -->
+      <div class="rack-module">
+        <div class="module-header">
+          <span class="module-title">4. EFFECTS BUS</span>
+        </div>
+        <div class="module-knobs-grid">
+          <div class="knob-unit">
+            <span class="knob-label">TIME</span>
+            <div class="rotary-knob" id="knob-fx-delay-time" data-param="delayTime">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">FEEDBACK</span>
+            <div class="rotary-knob" id="knob-fx-feedback" data-param="delayFeedback">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">MIX</span>
+            <div class="rotary-knob" id="knob-fx-mix" data-param="delayMix">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FL Studio 16-Step Pattern Sequencer -->
+    <section class="sequencer-panel">
+      <div class="sequencer-header">
+        <span class="sequencer-title">FL PATTERN SEQUENCER (16 STEPS)</span>
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">CLICK TO TOGGLE STEPS</span>
+      </div>
+
+      <div class="step-channels-container" id="step-channels-container">
+        <!-- Dynamically generated channel rows with 16 buttons each -->
+      </div>
+    </section>
+
+    <!-- Interactive Piano Roll Keyboard -->
+    <section class="piano-keyboard-panel">
+      <div class="sequencer-header">
+        <span class="sequencer-title">POLYPHONIC KEYBOARD (2 OCTAVES)</span>
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">PLAY WITH MOUSE OR COMPUTER KEYS (A-W-S-E-D-F...)</span>
+      </div>
+
+      <div class="keyboard-container" id="keyboard-container">
+        <!-- Generated keys -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div>
+      <strong>LocalSynth</strong> by Alan Joyce · Part of the <strong>LocalFilm Ireland</strong> Creative Engine
+    </div>
+    <div class="footer-links">
+      <a href="https://localturntables.com" target="_blank" class="footer-link">LocalTurntables</a>
+      <a href="https://localdaw.com" target="_blank" class="footer-link">LocalDAW</a>
+      <a href="https://localfilm.ie" target="_blank" class="footer-link">LocalFilm</a>
+      <a href="https://github.com/albertoxie/localsynth" target="_blank" class="footer-link">GitHub</a>
+    </div>
+  </footer>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
