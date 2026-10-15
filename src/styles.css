@@ -623,6 +623,90 @@ main.synth-studio {
   outline: none;
 }
 
+.btn-preset-action {
+  background: #1e2532;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-preset-action:hover {
+  background: #334155;
+  color: #fff;
+  border-color: #64748b;
+}
+
+.btn-record-audio {
+  background: #1e1919;
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+
+.btn-record-audio:hover {
+  background: #2b1717;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.btn-record-audio.recording {
+  background: #ef4444 !important;
+  color: #fff !important;
+  border-color: #fca5a5 !important;
+  animation: pulse-red 1s infinite alternate;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+  100% { box-shadow: 0 0 16px rgba(239, 68, 68, 0.9); }
+}
+
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  display: inline-block;
+  margin-right: 2px;
+}
+
+.btn-record-audio.recording .rec-dot {
+  background: #fff;
+}
+
+.btn-send-localdaw {
+  background: #0f242a;
+  border-color: #0e7490;
+  color: #38bdf8;
+  font-weight: 800;
+}
+
+.btn-send-localdaw:hover {
+  background: #083344;
+  border-color: #38bdf8;
+  color: #fff;
+}
+
+.step-btn {
+  position: relative;
+}
+
+.step-pitch-tag {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 8px;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
 /* Playlist Panel Arranger */
 .playlist-panel {
   background: var(--bg-panel);

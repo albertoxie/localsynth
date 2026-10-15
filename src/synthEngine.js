@@ -6,18 +6,25 @@ export class SynthEngine {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AudioContextClass();
 
-    // Master Output Bus
+    // Master Output Bus & Destination
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0.8;
 
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 512;
 
-    // Master Delay, Chorus & Distortion Bus
+    // Master Delay, Chorus, Reverb & Distortion Bus
     this.initMasterEffects();
 
     this.masterGain.connect(this.masterAnalyser);
     this.masterAnalyser.connect(this.ctx.destination);
+
+    // Audio Recording Stream & Destination
+    this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+    this.masterGain.connect(this.mediaStreamDest);
+    this.mediaRecorder = null;
+    this.recordedChunks = [];
+    this.isRecording = false;
 
     // Active Polyphonic Voices
     this.activeVoices = new Map();
@@ -62,7 +69,8 @@ export class SynthEngine {
       delayFeedback: 0.35,
       delayMix: 0.25,
       distDrive: 0.0,
-      reverbMix: 0.2,
+      reverbMix: 0.25,
+      chorusMix: 0.3,
 
       arpMode: 'off',
       arpRate: '1/16',
@@ -90,7 +98,7 @@ export class SynthEngine {
     this.currentSongBar = 0;
     this.sequencerTimer = null;
 
-    // Procedural Drum Sample Buffers (Expanded to 7 Instruments)
+    // Procedural Drum Sample Buffers
     this.drumBuffers = this.createProceduralDrums();
 
     // Multi-Pattern Architecture (FL Studio Channel Racks)
@@ -152,14 +160,18 @@ export class SynthEngine {
       { id: 'track_4', name: 'Track 4 (Drops & FX)', bars: ['pat_1', null, null, null, 'pat_2', null, null, null, null, null, 'pat_2', null, null, null, null, null] }
     ];
 
-    // Sound Presets Library
+    // Sound Presets Library & User Patches
     this.presets = this.createPresetLibrary();
+    this.loadUserPatches();
   }
 
   createDefaultChannels(stepGrids) {
+    const defaultLeadPitches = ['C4','D#4','F4','G4','A#4','C5','D#4','F4','G4','C4','D#4','F4','G4','A#4','C4','C4'];
+    const defaultBassPitches = ['C2','C2','D#2','F2','G2','C2','A#1','C2','C2','D#2','F2','G2','A#2','C2','C2','C2'];
+
     return [
-      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', volume: 0.85, mute: false, solo: false, steps: stepGrids[0] || new Array(16).fill(0) },
-      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', volume: 0.95, mute: false, solo: false, steps: stepGrids[1] || new Array(16).fill(0) },
+      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', stepNotes: [...defaultLeadPitches], volume: 0.85, mute: false, solo: false, steps: stepGrids[0] || new Array(16).fill(0) },
+      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', stepNotes: [...defaultBassPitches], volume: 0.95, mute: false, solo: false, steps: stepGrids[1] || new Array(16).fill(0) },
       { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: stepGrids[2] || new Array(16).fill(0) },
       { id: 'drum_snare', name: 'Studio Snare / Rim', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: stepGrids[3] || new Array(16).fill(0) },
       { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: stepGrids[4] || new Array(16).fill(0) },
@@ -180,6 +192,7 @@ export class SynthEngine {
   }
 
   initMasterEffects() {
+    // 1. Stereo Ping-Pong / Sync Delay
     this.delayNode = this.ctx.createDelay(2.0);
     this.delayNode.delayTime.value = 0.25;
     this.delayFeedbackNode = this.ctx.createGain();
@@ -192,9 +205,51 @@ export class SynthEngine {
     this.delayNode.connect(this.delayGain);
     this.delayGain.connect(this.masterGain);
 
+    // 2. Convolution / Algorithmic Hall Reverb
+    this.reverbConvolver = this.ctx.createConvolver();
+    this.reverbConvolver.buffer = this.createImpulseResponse(2.4, 2.0);
+    this.reverbGain = this.ctx.createGain();
+    this.reverbGain.gain.value = 0.25;
+
+    this.reverbConvolver.connect(this.reverbGain);
+    this.reverbGain.connect(this.masterGain);
+
+    // 3. Stereo Juno-Style Analog Chorus
+    this.chorusDelay = this.ctx.createDelay(0.1);
+    this.chorusDelay.delayTime.value = 0.025;
+    this.chorusLfo = this.ctx.createOscillator();
+    this.chorusLfo.frequency.value = 1.2;
+    this.chorusLfoGain = this.ctx.createGain();
+    this.chorusLfoGain.gain.value = 0.003;
+    this.chorusLfo.connect(this.chorusLfoGain);
+    this.chorusLfoGain.connect(this.chorusDelay.delayTime);
+    this.chorusLfo.start();
+
+    this.chorusGain = this.ctx.createGain();
+    this.chorusGain.gain.value = 0.3;
+    this.chorusDelay.connect(this.chorusGain);
+    this.chorusGain.connect(this.masterGain);
+
+    // 4. Overdrive & Distortion Waveshaper
     this.distNode = this.ctx.createWaveShaper();
     this.distNode.curve = this.makeDistortionCurve(0);
     this.distNode.oversample = '4x';
+  }
+
+  createImpulseResponse(durationSec, decay) {
+    const sr = this.ctx.sampleRate;
+    const length = Math.floor(sr * durationSec);
+    const impulse = this.ctx.createBuffer(2, length, sr);
+    const left = impulse.getChannelData(0);
+    const right = impulse.getChannelData(1);
+
+    for (let i = 0; i < length; i++) {
+      const n = i / length;
+      const env = Math.pow(1 - n, decay);
+      left[i] = (Math.random() * 2 - 1) * env;
+      right[i] = (Math.random() * 2 - 1) * env;
+    }
+    return impulse;
   }
 
   makeDistortionCurve(amount) {
@@ -226,7 +281,7 @@ export class SynthEngine {
           osc2Wave: 'sawtooth', osc2Octave: 0, osc2Semi: 0, osc2Detune: 12, osc2Gain: 0.6,
           subGain: 0.3, filterCutoff: 2800, filterResonance: 3.5, filterEnvAmount: 3200,
           ampAttack: 0.01, ampDecay: 0.3, ampSustain: 0.7, ampRelease: 0.25,
-          delayTime: 0.25, delayFeedback: 0.4, delayMix: 0.3
+          delayTime: 0.25, delayFeedback: 0.4, delayMix: 0.3, reverbMix: 0.25, chorusMix: 0.2
         }
       },
       {
@@ -238,7 +293,43 @@ export class SynthEngine {
           osc2Wave: 'square', osc2Octave: -1, osc2Semi: 0, osc2Detune: 0, osc2Gain: 0.0,
           subGain: 0.5, filterCutoff: 650, filterResonance: 9.5, filterEnvAmount: 4800,
           ampAttack: 0.01, ampDecay: 0.2, ampSustain: 0.05, ampRelease: 0.15,
-          delayTime: 0.3, delayFeedback: 0.45, delayMix: 0.2
+          delayTime: 0.3, delayFeedback: 0.45, delayMix: 0.25, reverbMix: 0.1, chorusMix: 0.0
+        }
+      },
+      {
+        id: 'moog_taurus',
+        name: 'Moog Taurus Analog Sub',
+        category: 'Bass',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: -2, osc1Semi: 0, osc1Gain: 0.9,
+          osc2Wave: 'square', osc2Octave: -2, osc2Semi: 0, osc2Detune: 6, osc2Gain: 0.85,
+          subGain: 0.8, filterCutoff: 420, filterResonance: 4.8, filterEnvAmount: 1200,
+          ampAttack: 0.02, ampDecay: 0.4, ampSustain: 0.8, ampRelease: 0.3,
+          delayTime: 0.2, delayFeedback: 0.1, delayMix: 0.05, reverbMix: 0.1, chorusMix: 0.0
+        }
+      },
+      {
+        id: 'stranger_arp',
+        name: 'Stranger Things Rolling Synth',
+        category: 'Arp',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: 0, osc1Semi: 0, osc1Gain: 0.8,
+          osc2Wave: 'square', osc2Octave: 1, osc2Semi: 0, osc2Detune: 9, osc2Gain: 0.7,
+          subGain: 0.3, filterCutoff: 1900, filterResonance: 6.2, filterEnvAmount: 3800,
+          ampAttack: 0.01, ampDecay: 0.22, ampSustain: 0.3, ampRelease: 0.28,
+          delayTime: 0.375, delayFeedback: 0.5, delayMix: 0.4, reverbMix: 0.45, chorusMix: 0.35
+        }
+      },
+      {
+        id: 'cyberpunk_reese',
+        name: 'Cyberpunk 2077 Reese Bass',
+        category: 'Bass',
+        params: {
+          osc1Wave: 'sawtooth', osc1Octave: -1, osc1Semi: 0, osc1Gain: 0.85,
+          osc2Wave: 'sawtooth', osc2Octave: -1, osc2Semi: 0, osc2Detune: 26, osc2Gain: 0.85,
+          subGain: 0.6, filterCutoff: 900, filterResonance: 3.5, filterEnvAmount: 2200,
+          ampAttack: 0.04, ampDecay: 0.5, ampSustain: 0.9, ampRelease: 0.4,
+          delayTime: 0.2, delayFeedback: 0.2, delayMix: 0.15, reverbMix: 0.15, chorusMix: 0.4
         }
       },
       {
@@ -250,7 +341,19 @@ export class SynthEngine {
           osc2Wave: 'sawtooth', osc2Octave: 0, osc2Semi: 0, osc2Detune: 18, osc2Gain: 0.75,
           subGain: 0.2, filterCutoff: 1200, filterResonance: 2.0, filterEnvAmount: 3500,
           ampAttack: 0.18, ampDecay: 0.6, ampSustain: 0.85, ampRelease: 0.75,
-          delayTime: 0.4, delayFeedback: 0.5, delayMix: 0.4
+          delayTime: 0.4, delayFeedback: 0.5, delayMix: 0.4, reverbMix: 0.55, chorusMix: 0.45
+        }
+      },
+      {
+        id: 'daft_funk_lead',
+        name: 'Daft Punk 909 Funk Lead',
+        category: 'Lead',
+        params: {
+          osc1Wave: 'square', osc1Octave: 0, osc1Semi: 0, osc1Gain: 0.8,
+          osc2Wave: 'sawtooth', osc2Octave: 0, osc2Semi: 7, osc2Detune: 10, osc2Gain: 0.6,
+          subGain: 0.1, filterCutoff: 4200, filterResonance: 5.5, filterEnvAmount: 2600,
+          ampAttack: 0.005, ampDecay: 0.15, ampSustain: 0.4, ampRelease: 0.12,
+          delayTime: 0.25, delayFeedback: 0.35, delayMix: 0.2, reverbMix: 0.2, chorusMix: 0.25
         }
       },
       {
@@ -262,7 +365,7 @@ export class SynthEngine {
           osc2Wave: 'square', osc2Octave: 0, osc2Semi: 7, osc2Detune: 15, osc2Gain: 0.5,
           subGain: 0.4, filterCutoff: 950, filterResonance: 1.8, filterEnvAmount: 1800,
           ampAttack: 0.45, ampDecay: 0.8, ampSustain: 0.9, ampRelease: 0.95,
-          delayTime: 0.35, delayFeedback: 0.55, delayMix: 0.45
+          delayTime: 0.35, delayFeedback: 0.55, delayMix: 0.45, reverbMix: 0.65, chorusMix: 0.7
         }
       },
       {
@@ -274,10 +377,56 @@ export class SynthEngine {
           osc2Wave: 'sine', osc2Octave: 2, osc2Semi: 7, osc2Detune: 5, osc2Gain: 0.6,
           subGain: 0.1, filterCutoff: 3800, filterResonance: 4.0, filterEnvAmount: 2200,
           ampAttack: 0.005, ampDecay: 0.18, ampSustain: 0.0, ampRelease: 0.15,
-          delayTime: 0.2, delayFeedback: 0.3, delayMix: 0.25
+          delayTime: 0.2, delayFeedback: 0.3, delayMix: 0.25, reverbMix: 0.3, chorusMix: 0.2
+        }
+      },
+      {
+        id: 'glass_chimes',
+        name: 'Ambient Glass Shimmer Chimes',
+        category: 'Ambient',
+        params: {
+          osc1Wave: 'sine', osc1Octave: 2, osc1Semi: 0, osc1Gain: 0.7,
+          osc2Wave: 'triangle', osc2Octave: 3, osc2Semi: 7, osc2Detune: 14, osc2Gain: 0.6,
+          subGain: 0.0, filterCutoff: 6500, filterResonance: 2.5, filterEnvAmount: 1500,
+          ampAttack: 0.08, ampDecay: 0.9, ampSustain: 0.5, ampRelease: 1.2,
+          delayTime: 0.45, delayFeedback: 0.65, delayMix: 0.55, reverbMix: 0.8, chorusMix: 0.5
         }
       }
     ];
+  }
+
+  loadUserPatches() {
+    try {
+      const saved = localStorage.getItem('localsynth_user_patches');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(p => {
+            if (!this.presets.find(existing => existing.id === p.id)) {
+              this.presets.push(p);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load user patches:', e);
+    }
+  }
+
+  saveUserPatch(name) {
+    const id = 'user_' + Date.now();
+    const patch = {
+      id,
+      name: `User: ${name}`,
+      category: 'Custom',
+      params: { ...this.params }
+    };
+    this.presets.push(patch);
+    try {
+      const userOnly = this.presets.filter(p => p.id.startsWith('user_'));
+      localStorage.setItem('localsynth_user_patches', JSON.stringify(userOnly));
+    } catch (e) {}
+    return patch;
   }
 
   loadPreset(presetId) {
@@ -289,7 +438,50 @@ export class SynthEngine {
       this.delayFeedbackNode.gain.value = this.params.delayFeedback;
       this.delayGain.gain.value = this.params.delayMix;
     }
+    if (this.reverbGain) {
+      this.reverbGain.gain.value = this.params.reverbMix;
+    }
+    if (this.chorusGain) {
+      this.chorusGain.gain.value = this.params.chorusMix;
+    }
     return p;
+  }
+
+  // Audio Recording (Master WAV & Stems)
+  startRecording() {
+    this.ensureContext();
+    this.recordedChunks = [];
+    try {
+      this.mediaRecorder = new MediaRecorder(this.mediaStreamDest.stream);
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          this.recordedChunks.push(e.data);
+        }
+      };
+      this.mediaRecorder.start(100);
+      this.isRecording = true;
+    } catch (err) {
+      console.error('MediaRecorder error:', err);
+    }
+  }
+
+  stopRecordingAndDownload(filename = 'LocalSynth_Song.webm') {
+    if (!this.mediaRecorder || !this.isRecording) return;
+    this.isRecording = false;
+
+    return new Promise((resolve) => {
+      this.mediaRecorder.onstop = () => {
+        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        resolve(blob);
+      };
+      this.mediaRecorder.stop();
+    });
   }
 
   // Arpeggiator
@@ -422,6 +614,8 @@ export class SynthEngine {
     filter2.connect(ampGain);
     ampGain.connect(this.masterGain);
     ampGain.connect(this.delayNode);
+    ampGain.connect(this.reverbConvolver);
+    ampGain.connect(this.chorusDelay);
 
     osc1.start(now);
     osc2.start(now);
@@ -518,12 +712,14 @@ export class SynthEngine {
       if (hasSolo && !ch.solo) return;
 
       if (ch.steps[stepIndex] === 1) {
+        // Read step-specific note or fallback to channel note
+        const noteToPlay = (ch.stepNotes && ch.stepNotes[stepIndex]) ? ch.stepNotes[stepIndex] : ch.note;
         if (ch.type === 'synth') {
-          const midi = this.noteToMidi(ch.note);
+          const midi = this.noteToMidi(noteToPlay);
           this.noteOn(midi, ch.volume || 0.9);
           setTimeout(() => this.noteOff(midi), 120);
         } else if (ch.type === 'bass') {
-          const midi = this.noteToMidi(ch.note);
+          const midi = this.noteToMidi(noteToPlay);
           this.noteOn(midi, ch.volume || 1.0);
           setTimeout(() => this.noteOff(midi), 140);
         } else if (ch.type === 'drum') {
@@ -568,7 +764,7 @@ export class SynthEngine {
     return (parseInt(match[2], 10) + 1) * 12 + notes.indexOf(match[1]);
   }
 
-  // Expanded High-Definition Procedural Drum Synthesis (Kick, Snare, Hi-Hat, 808 Sub, Clap, Crash)
+  // Expanded High-Definition Procedural Drum Synthesis
   createProceduralDrums() {
     const sr = this.ctx.sampleRate;
 

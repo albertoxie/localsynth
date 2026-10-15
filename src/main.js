@@ -2,6 +2,10 @@ import { SynthEngine } from './synthEngine.js';
 
 const synth = new SynthEngine();
 
+// Scale notes for pitch selection
+const PITCH_OPTIONS_LEAD = ['C3', 'D3', 'D#3', 'F3', 'G3', 'G#3', 'A#3', 'C4', 'D4', 'D#4', 'F4', 'G4', 'G#4', 'A#4', 'C5', 'D5', 'D#5', 'F5', 'G5', 'A#5', 'C6'];
+const PITCH_OPTIONS_BASS = ['C1', 'D1', 'D#1', 'F1', 'G1', 'A#1', 'C2', 'D2', 'D#2', 'F2', 'G2', 'G#2', 'A#2', 'C3', 'D#3', 'F3'];
+
 // Render Step Sequencer Channels for the currently active FL Pattern
 function initSequencerUI() {
   const container = document.getElementById('step-channels-container');
@@ -55,10 +59,49 @@ function initSequencerUI() {
       stepBtn.dataset.ch = chIdx;
       stepBtn.dataset.step = stepIdx;
 
-      stepBtn.addEventListener('click', () => {
+      // Note tag for melodic channels (FL Studio Piano Roll note badge)
+      if (ch.type === 'synth' || ch.type === 'bass') {
+        const pitchTag = document.createElement('span');
+        pitchTag.className = 'step-pitch-tag';
+        pitchTag.textContent = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
+        stepBtn.appendChild(pitchTag);
+      }
+
+      // Left click: toggle step
+      stepBtn.addEventListener('click', (e) => {
         ch.steps[stepIdx] = ch.steps[stepIdx] === 1 ? 0 : 1;
         stepBtn.classList.toggle('active');
+        if (ch.steps[stepIdx] === 1) {
+          const noteToTest = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
+          if (ch.type === 'synth' || ch.type === 'bass') {
+            const midi = synth.noteToMidi(noteToTest);
+            synth.noteOn(midi, 0.8);
+            setTimeout(() => synth.noteOff(midi), 150);
+          } else if (ch.type === 'drum') {
+            synth.playDrumSample(ch.sample, ch.volume);
+          }
+        }
       });
+
+      // Right-click / Context menu: Quick Piano Roll Pitch Picker
+      if (ch.type === 'synth' || ch.type === 'bass') {
+        stepBtn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const scale = ch.type === 'bass' ? PITCH_OPTIONS_BASS : PITCH_OPTIONS_LEAD;
+          const current = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
+          const nextIdx = (scale.indexOf(current) + 1) % scale.length;
+          const newPitch = scale[nextIdx >= 0 ? nextIdx : 0];
+          if (!ch.stepNotes) ch.stepNotes = new Array(16).fill(ch.note);
+          ch.stepNotes[stepIdx] = newPitch;
+          const tag = stepBtn.querySelector('.step-pitch-tag');
+          if (tag) tag.textContent = newPitch;
+          ch.steps[stepIdx] = 1;
+          stepBtn.classList.add('active');
+          const midi = synth.noteToMidi(newPitch);
+          synth.noteOn(midi, 0.85);
+          setTimeout(() => synth.noteOff(midi), 180);
+        });
+      }
 
       stepsGrid.appendChild(stepBtn);
     });
@@ -271,6 +314,12 @@ function initKnobs() {
         synth.delayNode.delayTime.value = 0.05 + norm * 0.95;
       } else if (param === 'delayFeedback') {
         synth.delayFeedbackNode.gain.value = norm * 0.85;
+      } else if (param === 'reverbMix') {
+        synth.params.reverbMix = norm * 0.9;
+        if (synth.reverbGain) synth.reverbGain.gain.value = synth.params.reverbMix;
+      } else if (param === 'chorusMix') {
+        synth.params.chorusMix = norm * 0.8;
+        if (synth.chorusGain) synth.chorusGain.gain.value = synth.params.chorusMix;
       } else if (param === 'distDrive') {
         synth.setDistortion(norm);
       } else if (param === 'ampAttack') {
@@ -305,10 +354,12 @@ function initKnobs() {
       else if (param === 'osc2Detune') synth.params.osc2Detune = 0;
       else if (param === 'delayTime') synth.delayNode.delayTime.value = 0.25;
       else if (param === 'delayFeedback') synth.delayFeedbackNode.gain.value = 0.35;
+      else if (param === 'reverbMix') { synth.params.reverbMix = 0.25; if (synth.reverbGain) synth.reverbGain.gain.value = 0.25; }
+      else if (param === 'chorusMix') { synth.params.chorusMix = 0.3; if (synth.chorusGain) synth.chorusGain.gain.value = 0.3; }
       else if (param === 'distDrive') synth.setDistortion(0);
     });
 
-    // Mouse wheel support for effortless knob tweaking!
+    // Mouse wheel support for effortless knob tweaking
     knob.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = e.deltaY < 0 ? 8 : -8;
@@ -317,6 +368,8 @@ function initKnobs() {
       if (param === 'filterCutoff') synth.params.filterCutoff = 40 * Math.pow(18000 / 40, norm);
       else if (param === 'filterResonance') synth.params.filterResonance = 0.1 + norm * 14.9;
       else if (param === 'filterEnvAmount') synth.params.filterEnvAmount = norm * 7000;
+      else if (param === 'reverbMix') { synth.params.reverbMix = norm * 0.9; if (synth.reverbGain) synth.reverbGain.gain.value = norm * 0.9; }
+      else if (param === 'chorusMix') { synth.params.chorusMix = norm * 0.8; if (synth.chorusGain) synth.chorusGain.gain.value = norm * 0.8; }
       else if (param === 'distDrive') synth.setDistortion(norm);
     }, { passive: false });
   });
@@ -330,12 +383,36 @@ function initKnobs() {
   });
 
   // Presets Dropdown
-  document.getElementById('synth-preset-dropdown').addEventListener('change', (e) => {
+  const presetDropdown = document.getElementById('synth-preset-dropdown');
+  presetDropdown.addEventListener('change', (e) => {
     const p = synth.loadPreset(e.target.value);
     if (p) {
       document.getElementById('osc1-wave').value = p.params.osc1Wave;
       document.getElementById('osc2-wave').value = p.params.osc2Wave;
     }
+  });
+
+  // Save Custom User Patch
+  document.getElementById('btn-save-patch').addEventListener('click', () => {
+    const patchName = prompt('Enter a name for your custom patch:', 'Analog Dreamer');
+    if (patchName && patchName.trim()) {
+      const p = synth.saveUserPatch(patchName.trim());
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      presetDropdown.appendChild(opt);
+      presetDropdown.value = p.id;
+      alert(`Patch "${patchName}" saved to browser memory!`);
+    }
+  });
+
+  // Export Patch as JSON
+  document.getElementById('btn-export-patch').addEventListener('click', () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(synth.params, null, 2));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    a.download = `LocalSynth_Patch_${Date.now()}.json`;
+    a.click();
   });
 
   // Arpeggiator Dropdown
@@ -347,7 +424,7 @@ function initKnobs() {
   });
 }
 
-// Transport, Mode Toggling & Sequencer Loop
+// Transport, Mode Toggling, Recording & Sequencer Loop
 function initTransport() {
   const playBtn = document.getElementById('btn-seq-play');
   const playText = document.getElementById('play-text');
@@ -356,6 +433,9 @@ function initTransport() {
   const btnModeSong = document.getElementById('btn-mode-song');
   const patDropdown = document.getElementById('pattern-select-dropdown');
   const brushBadge = document.getElementById('brush-badge');
+  const recordBtn = document.getElementById('btn-record-audio');
+  const recordText = document.getElementById('record-text');
+  const sendDawBtn = document.getElementById('btn-send-localdaw');
 
   // Mode Toggling: PAT vs SONG
   if (btnModePat && btnModeSong) {
@@ -425,15 +505,45 @@ function initTransport() {
     }
   });
 
+  // Audio Recording Toggle
+  if (recordBtn) {
+    recordBtn.addEventListener('click', async () => {
+      if (synth.isRecording) {
+        recordBtn.classList.remove('recording');
+        recordText.textContent = 'SAVING...';
+        await synth.stopRecordingAndDownload(`LocalSynth_${synth.playMode}_${Date.now()}.webm`);
+        recordText.textContent = 'RECORD AUDIO';
+      } else {
+        synth.startRecording();
+        recordBtn.classList.add('recording');
+        recordText.textContent = 'RECORDING...';
+        if (!synth.isPlaying) {
+          synth.startPlayback(handlePlaybackTick);
+          playBtn.classList.add('playing');
+          playText.textContent = 'STOP';
+        }
+      }
+    });
+  }
+
+  // Send to LocalDAW Integration
+  if (sendDawBtn) {
+    sendDawBtn.addEventListener('click', () => {
+      const dawUrl = `https://localdaw.com/?source=localsynth&bpm=${synth.bpm}`;
+      window.open(dawUrl, '_blank');
+    });
+  }
+
   // Random Acid Bassline Generator
   document.getElementById('btn-randomize-acid').addEventListener('click', () => {
     const activePat = synth.getActivePattern();
     const bassCh = activePat.channels.find(c => c.id === 'acid_bass');
     if (bassCh) {
       const notes = ['C2', 'D#2', 'F2', 'G2', 'A#2', 'C3'];
-      bassCh.note = notes[Math.floor(Math.random() * notes.length)];
+      if (!bassCh.stepNotes) bassCh.stepNotes = new Array(16).fill('C2');
       for (let i = 0; i < 16; i++) {
         bassCh.steps[i] = Math.random() > 0.4 ? 1 : 0;
+        bassCh.stepNotes[i] = notes[Math.floor(Math.random() * notes.length)];
       }
       initSequencerUI();
     }
@@ -492,10 +602,11 @@ function initSplashScreen() {
   const startBtn = document.getElementById('splash-start-btn');
 
   const steps = [
-    { pct: 25, text: 'CALIBRATING 64-BIT DUAL OSCILLATORS...' },
-    { pct: 50, text: 'WARMING 24dB RESONANT LADDER FILTER...' },
-    { pct: 75, text: 'INITIALIZING FL MULTI-PATTERN SEQUENCER...' },
-    { pct: 100, text: '16-BAR PLAYLIST ARRANGEMENT ENGINE READY' }
+    { pct: 20, text: 'CALIBRATING 64-BIT DUAL OSCILLATORS...' },
+    { pct: 40, text: 'WARMING 24dB RESONANT LADDER FILTER...' },
+    { pct: 60, text: 'SYNTHESIZING CONVOLUTION REVERB & JUNO CHORUS...' },
+    { pct: 80, text: 'INITIALIZING FL MULTI-PATTERN SEQUENCER & RECORDER...' },
+    { pct: 100, text: 'LOCALSYNTH PRO STUDIO READY' }
   ];
 
   let currentStep = 0;
@@ -509,7 +620,7 @@ function initSplashScreen() {
       clearInterval(interval);
       startBtn.classList.add('ready');
     }
-  }, 350);
+  }, 300);
 
   const dismissSplash = () => {
     synth.ensureContext();
@@ -537,4 +648,3 @@ window.addEventListener('DOMContentLoaded', () => {
   initTransport();
   startOscilloscope();
 });
-

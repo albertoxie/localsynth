@@ -36,19 +36,26 @@
       </div>
     </div>
 
-    <!-- Sound Preset Quick Selector -->
+    <!-- Sound Preset Quick Selector & Custom Patch Tools -->
     <div class="preset-selector-group">
       <span class="preset-label">PATCH:</span>
       <select id="synth-preset-dropdown" class="preset-dropdown">
         <option value="init_saw">Classic Dual Saw Lead</option>
         <option value="acid_303">TB-303 Acid Squelch</option>
+        <option value="moog_taurus">Moog Taurus Analog Sub</option>
+        <option value="stranger_arp">Stranger Things Rolling Synth</option>
+        <option value="cyberpunk_reese">Cyberpunk 2077 Reese Bass</option>
         <option value="blade_runner_brass">Blade Runner CS-80 Brass</option>
+        <option value="daft_funk_lead">Daft Punk 909 Funk Lead</option>
         <option value="juno_pad">Juno-106 Ambient Pad</option>
         <option value="fm_pluck">Retro 80s FM Pluck</option>
+        <option value="glass_chimes">Ambient Glass Shimmer Chimes</option>
       </select>
+      <button id="btn-save-patch" class="btn-preset-action" title="Save Current Knobs as Custom User Patch">SAVE</button>
+      <button id="btn-export-patch" class="btn-preset-action" title="Export Patch as JSON">EXPORT</button>
     </div>
 
-    <!-- Master Transport & Arpeggiator Bar -->
+    <!-- Master Transport, FL Mode & Recording Bar -->
     <div class="transport-bar">
       <!-- FL Mode Switch: PAT (Pattern Loop) vs SONG (Timeline Playlist) -->
       <div class="fl-mode-toggle-group">
@@ -71,6 +78,17 @@
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
         <span id="play-text">PLAY</span>
+      </button>
+
+      <!-- Record Song / Pattern Audio Stream -->
+      <button class="btn-transport btn-record-audio" id="btn-record-audio" title="Record Live Master Audio stream to WAV/WebM">
+        <span class="rec-dot"></span>
+        <span id="record-text">RECORD AUDIO</span>
+      </button>
+
+      <!-- Send to LocalDAW -->
+      <button class="btn-transport btn-send-localdaw" id="btn-send-localdaw" title="Bounce and open multitrack stem in LocalDAW">
+        🎛️ TO LOCALDAW
       </button>
 
       <div class="bpm-control">
@@ -198,9 +216,9 @@
         <div class="module-header">
           <span class="module-title">4. FX BUS & SPACE</span>
         </div>
-        <div class="module-knobs-grid">
+        <div class="module-knobs-grid" style="grid-template-columns: repeat(5, 1fr);">
           <div class="knob-unit">
-            <span class="knob-label">DELAY TIME</span>
+            <span class="knob-label">DELAY</span>
             <div class="rotary-knob" id="knob-fx-delay-time" data-param="delayTime">
               <div class="rotary-knob-pointer"></div>
             </div>
@@ -208,6 +226,18 @@
           <div class="knob-unit">
             <span class="knob-label">FEEDBACK</span>
             <div class="rotary-knob" id="knob-fx-feedback" data-param="delayFeedback">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">REVERB</span>
+            <div class="rotary-knob" id="knob-fx-reverb" data-param="reverbMix">
+              <div class="rotary-knob-pointer"></div>
+            </div>
+          </div>
+          <div class="knob-unit">
+            <span class="knob-label">CHORUS</span>
+            <div class="rotary-knob" id="knob-fx-chorus" data-param="chorusMix">
               <div class="rotary-knob-pointer"></div>
             </div>
           </div>
