@@ -4,6 +4,32 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [1.6.0] - 2026-10-15
+### Added
+- **New Intro Splash Artwork**:
+  - Replaced loading screen logo with official user artwork featuring custom synth hardware typography and neon spectrum display.
+- **Master Space FX: Convolution Reverb & Juno Chorus**:
+  - Algorithmic/convolution stereo hall reverb node with wet/dry rotary control.
+  - Roland Juno-style analog bucket-brigade chorus with LFO modulation and stereo widening.
+- **Master Audio Recorder**:
+  - Added live audio stream recording (`RECORD AUDIO`) using `createMediaStreamDestination` + `MediaRecorder`.
+  - Captures master mixdown in real-time and triggers automatic audio download on stop.
+- **Send to LocalDAW Integration**:
+  - Added dedicated `TO LOCALDAW` transport button passing BPM and synth metadata to `localdaw.com` for mixing/mastering.
+- **Piano Roll Pitch Picker (Right-Click per Step)**:
+  - Each step on melodic channels (Synth Lead & TB-303 Acid Bass) displays its active musical note tag (e.g. `C4`, `D#4`, `G4`).
+  - Right-clicking any step cycles through musical scales, allowing melodically sequenced basslines and synth leads.
+- **Expanded 10 Signature Presets & Custom Patch Memory**:
+  - Added Moog Taurus Analog Sub, Stranger Things Rolling Synth, Cyberpunk 2077 Reese Bass, Daft Punk 909 Funk Lead, and Ambient Glass Shimmer Chimes.
+  - Added `SAVE` patch button storing custom knob parameters to `localStorage`.
+  - Added `EXPORT` patch button downloading JSON patch presets for sharing.
+
+### Deployment
+- Live Cloudflare Pages: `https://localsynth.pages.dev` (Edge deployed).
+- GitHub Repo: `https://github.com/albertoxie/localsynth`.
+
+---
+
 ## [1.4.0] - 2026-10-15
 ### Added
 - **Multi-Pattern Architecture (FL Studio Pattern Engine)**:
@@ -20,10 +46,6 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
   - Punch 909 Kick, Studio Snare, Open 909 Hi-Hat, Boom 808 Sub-Bass, Analog Handclap, and Cymbal Crash / Splash.
 - **Precision Rotary Knobs**:
   - Smooth pointer-capture drag physics, mouse-wheel fine adjustment, and double-click reset to default center.
-
-### Deployment
-- Live Cloudflare Pages: `https://localsynth.pages.dev` (Edge deployed).
-- GitHub Repo: `https://github.com/albertoxie/localsynth`.
 
 ---
 
