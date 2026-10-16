@@ -4,6 +4,16 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [2.0.0] - 2026-10-16
+### Added & Improved
+- **100% Clean MIDI Song Slate & Multi-Instrument Separation (`src/midiFileParser.js`, `src/synthEngine.js`)**:
+  - Loading any `.mid` / `.midi` file now **completely wipes all pre-existing factory patterns and dummy channels** so ONLY the patterns, bars, and instruments from your loaded MIDI file exist in the Channel Rack and 16-Bar Song Playlist.
+  - **General MIDI Program Change (`0xC0`) Instrument Auto-Detection (`getGmInstrumentSpec`)**: Automatically reads each MIDI track's Program Change byte, channel number, track name, and pitch register to assign the proper instrument family and custom polyphonic synth timbre (`🎹 Grand Piano / Rhodes EP`, `🔔 Glockenspiel / Bells`, `🎹 Hammond Organ`, `🎸 Pluck / Overdriven Guitar`, `🎸 Slap / Sub Synth Bass`, `🎻 Analog String Ensemble`, `🎺 CS-80 Synth Brass`, `⚡ Square / Saw Lead`, `🌌 Warm Juno Pad`, and `🥁 GM Percussion`).
+  - **Independent Polyphonic Per-Instrument Voices (`playInstrumentVoice`)**: Each separated instrument row in the Channel Rack synthesizes its own dedicated dual-oscillator waveform, octave, filter cutoff, resonance, and envelope gate duration (`stepDurations`) simultaneously without cutting off other instruments.
+  - **Automatic Tempo (BPM) & Live Bar Tracking**: Extracts the exact MIDI Tempo Meta Event (`0x51`) to set the studio BPM automatically, populates up to 16 distinct bar patterns (`Bar 1` .. `Bar 16`), switches the Channel Rack live as each bar plays in `SONG` mode, and starts playback immediately.
+
+---
+
 ## [1.9.0] - 2026-10-16
 ### Added
 - **Standard MIDI File (`.mid` / `.midi`) Importer & Drag-and-Drop Engine (`src/midiFileParser.js`)**:

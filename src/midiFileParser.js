@@ -1,8 +1,201 @@
-// LocalSynth Native Binary Standard MIDI File (.mid / .midi) Parser & Song Importer
-// Supports SMF Format 0 and Format 1, variable-length delta times, running status, tempo meta events (0x51),
-// polyphonic melody/bass extraction, and General MIDI Channel 10 (index 9) drum mapping.
+// LocalSynth Native Binary Standard MIDI File (.mid / .midi) Parser, General MIDI Instrument Detector & Multi-Track Song Mapper
+// Supports SMF Format 0 & Format 1, Program Change (0xC0) GM Instrument Recognition, Tempo Meta (0x51),
+// Clean Multi-Track Instrument Separation, and 16-Bar Song Arrangement.
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+// General MIDI 128 Instrument Families & Dedicated Synth Timbres
+export function getGmInstrumentSpec(programNumber = 0, channel = 0, avgPitch = 60, trackTitle = '') {
+  if (channel === 9) {
+    return {
+      family: 'Drums',
+      label: 'GM Percussion Kit',
+      type: 'drum',
+      color: '#f59e0b'
+    };
+  }
+
+  const prog = Math.max(0, Math.min(127, programNumber || 0));
+  const lowerTitle = (trackTitle || '').toLowerCase();
+
+  // Check if explicitly Bass by GM Program (32–39) or track name or very low average register
+  if ((prog >= 32 && prog <= 39) || lowerTitle.includes('bass') || avgPitch < 48) {
+    const bassNames = [
+      'Acoustic Bass', 'Fingered Bass', 'Picked Bass', 'Fretless Bass',
+      'Slap Bass 1', 'Slap Bass 2', 'Analog Synth Bass', 'FM Synth Bass'
+    ];
+    const name = (prog >= 32 && prog <= 39) ? bassNames[prog - 32] : 'Sub / Synth Bass';
+    return {
+      family: 'Bass',
+      label: `🎸 ${name}`,
+      type: 'bass',
+      color: '#10b981',
+      presetId: 'acid_303',
+      timbre: {
+        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.85,
+        osc2Wave: 'square', osc2Octave: -1, osc2Gain: 0.55, detune: 4,
+        cutoff: 850, resonance: 7.5, envMod: 3400,
+        attack: 0.008, decay: 0.22, release: 0.14
+      }
+    };
+  }
+
+  // Piano / Keys (0–7)
+  if (prog >= 0 && prog <= 7) {
+    const names = ['Grand Piano', 'Bright Piano', 'Electric Grand', 'Honky-Tonk', 'Rhodes EP', 'DX7 Chorused EP', 'Harpsichord', 'Clavinet'];
+    return {
+      family: 'Keys',
+      label: `🎹 ${names[prog]}`,
+      type: 'synth',
+      color: '#38bdf8',
+      presetId: 'fm_pluck',
+      timbre: {
+        osc1Wave: 'triangle', osc1Octave: 0, osc1Gain: 0.75,
+        osc2Wave: 'sine', osc2Octave: 1, osc2Gain: 0.4, detune: 6,
+        cutoff: 3400, resonance: 2.2, envMod: 2600,
+        attack: 0.008, decay: 0.35, release: 0.25
+      }
+    };
+  }
+
+  // Chromatic Percussion / Bells / Plucks (8–15)
+  if (prog >= 8 && prog <= 15) {
+    const names = ['Celesta', 'Glockenspiel', 'Music Box', 'Vibraphone', 'Marimba', 'Xylophone', 'Tubular Bells', 'Dulcimer'];
+    return {
+      family: 'Bells',
+      label: `🔔 ${names[prog - 8]}`,
+      type: 'synth',
+      color: '#e879f9',
+      presetId: 'glass_chimes',
+      timbre: {
+        osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.8,
+        osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.5, detune: 12,
+        cutoff: 5200, resonance: 3.5, envMod: 3200,
+        attack: 0.005, decay: 0.28, release: 0.35
+      }
+    };
+  }
+
+  // Organs (16–23)
+  if (prog >= 16 && prog <= 23) {
+    return {
+      family: 'Organ',
+      label: '🎹 Hammond / Drawbar Organ',
+      type: 'synth',
+      color: '#fbbf24',
+      presetId: 'juno_pad',
+      timbre: {
+        osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.75,
+        osc2Wave: 'square', osc2Octave: 1, osc2Gain: 0.35, detune: 5,
+        cutoff: 2800, resonance: 1.8, envMod: 900,
+        attack: 0.015, decay: 0.3, release: 0.2
+      }
+    };
+  }
+
+  // Guitars (24–31)
+  if (prog >= 24 && prog <= 31) {
+    const isDist = prog >= 29;
+    return {
+      family: 'Guitar',
+      label: isDist ? '🎸 Overdriven Lead Guitar' : '🎸 Pluck Synth Guitar',
+      type: 'synth',
+      color: '#f97316',
+      presetId: isDist ? 'daft_funk_lead' : 'fm_pluck',
+      timbre: {
+        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
+        osc2Wave: 'square', osc2Octave: 0, osc2Gain: 0.55, detune: 10,
+        cutoff: isDist ? 3800 : 2400, resonance: isDist ? 5.5 : 2.8, envMod: 2800,
+        attack: 0.008, decay: 0.25, release: 0.2
+      }
+    };
+  }
+
+  // Strings & Orchestral Ensemble (40–55)
+  if (prog >= 40 && prog <= 55) {
+    return {
+      family: 'Strings',
+      label: '🎻 Analog String Ensemble',
+      type: 'synth',
+      color: '#a855f7',
+      presetId: 'juno_pad',
+      timbre: {
+        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.65,
+        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.65, detune: 18,
+        cutoff: 2400, resonance: 2.0, envMod: 1600,
+        attack: 0.06, decay: 0.45, release: 0.4
+      }
+    };
+  }
+
+  // Brass & Horns (56–63)
+  if (prog >= 56 && prog <= 63) {
+    return {
+      family: 'Brass',
+      label: '🎺 CS-80 Synth Brass',
+      type: 'synth',
+      color: '#f59e0b',
+      presetId: 'blade_runner_brass',
+      timbre: {
+        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
+        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.7, detune: 15,
+        cutoff: 1800, resonance: 3.2, envMod: 3600,
+        attack: 0.035, decay: 0.4, release: 0.3
+      }
+    };
+  }
+
+  // Synth Leads (80–87)
+  if (prog >= 80 && prog <= 87) {
+    const leads = ['Square Lead', 'Sawtooth Lead', 'Calliope Lead', 'Chiff Lead', 'Charang Lead', 'Voice Lead', 'Fifths Lead', 'Bass + Lead'];
+    const isSquare = prog === 80;
+    return {
+      family: 'Synth Lead',
+      label: `⚡ ${leads[prog - 80]}`,
+      type: 'synth',
+      color: '#f97316',
+      presetId: 'init_saw',
+      timbre: {
+        osc1Wave: isSquare ? 'square' : 'sawtooth', osc1Octave: 0, osc1Gain: 0.8,
+        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.6, detune: 12,
+        cutoff: 3200, resonance: 4.2, envMod: 3400,
+        attack: 0.01, decay: 0.28, release: 0.22
+      }
+    };
+  }
+
+  // Synth Pads (88–95)
+  if (prog >= 88 && prog <= 95) {
+    return {
+      family: 'Synth Pad',
+      label: '🌌 Warm Juno Pad',
+      type: 'synth',
+      color: '#06b6d4',
+      presetId: 'juno_pad',
+      timbre: {
+        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.6,
+        osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.55, detune: 16,
+        cutoff: 1900, resonance: 2.5, envMod: 1800,
+        attack: 0.05, decay: 0.5, release: 0.45
+      }
+    };
+  }
+
+  // Default Poly Synth / Lead
+  return {
+    family: 'Synth',
+    label: trackTitle ? `🎹 ${trackTitle.substring(0, 18)}` : `🎹 Poly Synth (Ch ${channel + 1})`,
+    type: 'synth',
+    color: '#f97316',
+    presetId: 'init_saw',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
+      osc2Wave: 'square', osc2Octave: 0, osc2Gain: 0.5, detune: 10,
+      cutoff: 2800, resonance: 3.5, envMod: 2800,
+      attack: 0.01, decay: 0.25, release: 0.2
+    }
+  };
+}
 
 export function midiNumberToName(midiNum) {
   const clamped = Math.max(12, Math.min(108, Math.round(midiNum)));
@@ -46,15 +239,15 @@ export function parseStandardMidiFile(arrayBuffer) {
   const timeDivision = data.getUint16(pos + 4, false);
   pos += headerLen;
 
-  // Ticks per quarter note
   let ticksPerBeat = 480;
   if ((timeDivision & 0x8000) === 0) {
     ticksPerBeat = timeDivision || 480;
   }
 
   let detectedBpm = 128;
-  let foundTempo = false;
-  const rawNotes = []; // { tick, midi, velocity, channel, durationTicks, trackIndex, trackName }
+  const tempoEvents = []; // { tick, bpm }
+  const channelPrograms = new Map(); // channel -> programNumber
+  const rawNotes = []; // { tick, midi, velocity, channel, program, durationTicks, trackIndex, trackName }
 
   // 2. Parse each MTrk chunk
   for (let t = 0; t < numTracks && pos < data.byteLength; t++) {
@@ -71,8 +264,8 @@ export function parseStandardMidiFile(arrayBuffer) {
     const trackEnd = Math.min(data.byteLength, pos + chunkLen);
     let currentTick = 0;
     let runningStatus = 0;
-    let trackName = `Track ${t + 1}`;
-    const openNotes = new Map(); // key: `${channel}_${midi}` -> { tick, velocity }
+    let trackName = '';
+    const openNotes = new Map();
 
     while (pos < trackEnd) {
       const delta = readVarLen();
@@ -82,7 +275,6 @@ export function parseStandardMidiFile(arrayBuffer) {
       let statusByte = data.getUint8(pos);
       if (statusByte >= 0x80) {
         pos++;
-        // Do not overwrite runningStatus for System Common / Real-Time messages
         if (statusByte < 0xf0) {
           runningStatus = statusByte;
         }
@@ -91,30 +283,27 @@ export function parseStandardMidiFile(arrayBuffer) {
       }
 
       if (statusByte === 0xff) {
-        // Meta Event
         if (pos >= trackEnd) break;
         const metaType = data.getUint8(pos++);
         const metaLen = readVarLen();
-        if (metaType === 0x51 && metaLen === 3 && !foundTempo && pos + 3 <= trackEnd) {
+        if (metaType === 0x51 && metaLen === 3 && pos + 3 <= trackEnd) {
           const mpqn = (data.getUint8(pos) << 16) | (data.getUint8(pos + 1) << 8) | data.getUint8(pos + 2);
           if (mpqn > 0) {
             const bpm = Math.round(60000000 / mpqn);
-            if (bpm >= 45 && bpm <= 240) {
-              detectedBpm = bpm;
-              foundTempo = true;
+            if (bpm >= 40 && bpm <= 240) {
+              tempoEvents.push({ tick: currentTick, bpm });
             }
           }
-        } else if (metaType === 0x03 && metaLen > 0 && pos + metaLen <= trackEnd) {
+        } else if ((metaType === 0x03 || metaType === 0x04) && metaLen > 0 && pos + metaLen <= trackEnd) {
           let nameStr = '';
           for (let i = 0; i < metaLen; i++) {
             const chCode = data.getUint8(pos + i);
             if (chCode >= 32 && chCode <= 126) nameStr += String.fromCharCode(chCode);
           }
-          if (nameStr.trim()) trackName = nameStr.trim();
+          if (nameStr.trim() && !trackName) trackName = nameStr.trim();
         }
         pos += metaLen;
       } else if (statusByte === 0xf0 || statusByte === 0xf7) {
-        // SysEx Event
         const sysexLen = readVarLen();
         pos += sysexLen;
       } else {
@@ -126,7 +315,7 @@ export function parseStandardMidiFile(arrayBuffer) {
           const vel = data.getUint8(pos++);
           const key = `${ch}_${note}`;
           if (vel > 0) {
-            openNotes.set(key, { tick: currentTick, velocity: vel });
+            openNotes.set(key, { tick: currentTick, velocity: vel, program: channelPrograms.get(ch) ?? 0 });
           } else {
             const startObj = openNotes.get(key);
             if (startObj) {
@@ -135,6 +324,7 @@ export function parseStandardMidiFile(arrayBuffer) {
                 midi: note,
                 velocity: startObj.velocity,
                 channel: ch,
+                program: startObj.program,
                 durationTicks: Math.max(1, currentTick - startObj.tick),
                 trackIndex: t,
                 trackName
@@ -153,24 +343,27 @@ export function parseStandardMidiFile(arrayBuffer) {
               midi: note,
               velocity: startObj.velocity,
               channel: ch,
+              program: startObj.program,
               durationTicks: Math.max(1, currentTick - startObj.tick),
               trackIndex: t,
               trackName
             });
             openNotes.delete(key);
           }
-        } else if (cmd === 0xc0 || cmd === 0xd0) {
+        } else if (cmd === 0xc0) {
+          // Program Change (0xC0): sets instrument patch for this MIDI channel!
+          const progNum = data.getUint8(pos++);
+          channelPrograms.set(ch, progNum);
+        } else if (cmd === 0xd0) {
           pos += 1;
         } else if (cmd === 0xa0 || cmd === 0xb0 || cmd === 0xe0) {
           pos += 2;
         } else {
-          // Unknown byte safety advance
           pos += 1;
         }
       }
     }
 
-    // Close any lingering notes at track end
     openNotes.forEach((startObj, key) => {
       const [chStr, noteStr] = key.split('_');
       rawNotes.push({
@@ -178,6 +371,7 @@ export function parseStandardMidiFile(arrayBuffer) {
         midi: parseInt(noteStr, 10),
         velocity: startObj.velocity,
         channel: parseInt(chStr, 10),
+        program: startObj.program,
         durationTicks: Math.max(ticksPerBeat / 4, currentTick - startObj.tick),
         trackIndex: t,
         trackName
@@ -187,172 +381,248 @@ export function parseStandardMidiFile(arrayBuffer) {
     pos = trackEnd;
   }
 
+  // Pick dominant / initial tempo from tempoEvents
+  if (tempoEvents.length > 0) {
+    detectedBpm = tempoEvents[0].bpm;
+  }
+
   return {
     format,
     numTracks,
     ticksPerBeat,
     bpm: detectedBpm,
+    channelPrograms: Object.fromEntries(channelPrograms),
     notes: rawNotes.sort((a, b) => a.tick - b.tick)
   };
 }
 
-// Convert parsed MIDI notes into up to 4 FL Studio 16-step Patterns + 16-Bar Playlist Arrangement
-export function mapMidiToSynthPatterns(parsedMidi, synth, fileName = 'MIDI Track') {
+// Build a 100% FRESH, CLEAN multi-instrument track & 16-bar song arrangement from the parsed MIDI file
+export function mapMidiToSynthPatterns(parsedMidi, synth, fileName = 'MIDI Song') {
   const { ticksPerBeat, bpm, notes } = parsedMidi;
   if (!notes || notes.length === 0) {
     throw new Error('No playable MIDI notes found in this file.');
   }
 
-  // Normalize start offset so the first active note begins cleanly at Bar 1
-  const minTick = notes[0].tick;
+  const cleanTitle = fileName.replace(/\.(mid|midi)$/i, '').substring(0, 20);
   const ticksPer16th = ticksPerBeat / 4;
   const ticksPerBar = ticksPer16th * 16;
 
-  // Snap minTick down to the nearest bar boundary so pickup/groove alignment stays intact
+  // Snap first note to Bar 1 while preserving pickup position inside the bar
+  const minTick = notes[0].tick;
   const startBarOffsetTick = Math.floor(minTick / ticksPerBar) * ticksPerBar;
 
-  // Group events into 16-step bars (up to 16 bars total)
-  const barData = Array.from({ length: 16 }, () => ({
-    leadSteps: new Array(16).fill(0),
-    leadNotes: new Array(16).fill('C4'),
-    bassSteps: new Array(16).fill(0),
-    bassNotes: new Array(16).fill('C2'),
-    kickSteps: new Array(16).fill(0),
-    snareSteps: new Array(16).fill(0),
-    hihatSteps: new Array(16).fill(0),
-    sub808Steps: new Array(16).fill(0),
-    clapSteps: new Array(16).fill(0),
-    crashSteps: new Array(16).fill(0),
-    eventCount: 0
-  }));
+  // 1. Separate MIDI notes into distinct Instrument Streams (by Track + Channel + Program)
+  const melodicGroups = new Map();
+  const drumNotes = [];
 
   notes.forEach((n) => {
-    const relTick = Math.max(0, n.tick - startBarOffsetTick);
-    const totalStepIndex = Math.round(relTick / ticksPer16th);
-    const barIdx = Math.floor(totalStepIndex / 16);
-    const stepIdx = totalStepIndex % 16;
-
-    if (barIdx < 0 || barIdx >= 16) return;
-    const bar = barData[barIdx];
-    bar.eventCount++;
-
-    // General MIDI Channel 10 (0-indexed channel 9) is Percussion/Drums
     if (n.channel === 9) {
-      if (n.midi === 35 || n.midi === 36) {
-        bar.kickSteps[stepIdx] = 1;
-      } else if (n.midi === 38 || n.midi === 40 || n.midi === 37) {
-        bar.snareSteps[stepIdx] = 1;
-      } else if (n.midi === 39) {
-        bar.clapSteps[stepIdx] = 1;
-      } else if (n.midi === 42 || n.midi === 44 || n.midi === 46) {
-        bar.hihatSteps[stepIdx] = 1;
-      } else if (n.midi === 49 || n.midi === 51 || n.midi === 55 || n.midi === 57) {
-        bar.crashSteps[stepIdx] = 1;
-      } else if (n.midi <= 45) {
-        bar.sub808Steps[stepIdx] = 1;
-      } else {
-        bar.hihatSteps[stepIdx] = 1;
-      }
+      drumNotes.push(n);
     } else {
-      // Melodic note: split into Bass (< 55 / G3) vs Synth Lead (>= 55)
-      const noteName = midiNumberToName(n.midi);
-      if (n.midi < 55) {
-        bar.bassSteps[stepIdx] = 1;
-        bar.bassNotes[stepIdx] = noteName;
-      } else {
-        bar.leadSteps[stepIdx] = 1;
-        bar.leadNotes[stepIdx] = noteName;
+      const groupKey = `ch${n.channel}_prog${n.program}_tr${n.trackIndex}`;
+      if (!melodicGroups.has(groupKey)) {
+        melodicGroups.set(groupKey, {
+          key: groupKey,
+          channel: n.channel,
+          program: n.program,
+          trackIndex: n.trackIndex,
+          trackName: n.trackName || '',
+          notes: []
+        });
       }
+      melodicGroups.get(groupKey).notes.push(n);
     }
   });
 
-  // Find active bars with notes
-  const activeBars = barData
-    .map((b, idx) => ({ ...b, barIdx: idx }))
-    .filter((b) => b.eventCount > 0);
+  // Sort melodic instrument streams by note activity & register so main Lead, Bass, Chords, Arp are prioritized
+  let sortedMelodic = Array.from(melodicGroups.values()).sort((a, b) => b.notes.length - a.notes.length);
 
-  if (activeBars.length === 0) {
-    throw new Error('MIDI notes fell outside playable range.');
+  // If the MIDI file put everything on a single track/channel (e.g. piano roll with bass + treble together),
+  // automatically split it into a High Melody Instrument (>= C4 / 60) and a Low Bass/Harmony Instrument (< 60)
+  if (sortedMelodic.length === 1 && sortedMelodic[0].notes.length > 8) {
+    const single = sortedMelodic[0];
+    const highNotes = single.notes.filter((n) => n.midi >= 58);
+    const lowNotes = single.notes.filter((n) => n.midi < 58);
+    if (highNotes.length > 0 && lowNotes.length > 0) {
+      sortedMelodic = [
+        { ...single, key: 'split_high', notes: highNotes, trackName: single.trackName ? `${single.trackName} (Lead)` : 'Lead Melody' },
+        { ...single, key: 'split_low', program: 38, notes: lowNotes, trackName: single.trackName ? `${single.trackName} (Bass)` : 'Synth Bass' }
+      ];
+    }
   }
 
-  // If the MIDI file didn't include drum tracks, generate a tasteful backing groove on Kick & HiHat so it's immediately fun
-  const hasAnyDrums = activeBars.some((b) =>
-    b.kickSteps.some(Boolean) || b.snareSteps.some(Boolean) || b.hihatSteps.some(Boolean)
-  );
+  // Take up to 6 distinct melodic instruments from the MIDI file
+  const activeInstruments = sortedMelodic.slice(0, 6).map((grp) => {
+    const avgPitch = grp.notes.reduce((acc, x) => acc + x.midi, 0) / grp.notes.length;
+    const spec = getGmInstrumentSpec(grp.program, grp.channel, avgPitch, grp.trackName);
+    const customLabel = grp.trackName && !grp.trackName.toLowerCase().startsWith('track')
+      ? `${spec.label.split(' ')[0]} ${grp.trackName.substring(0, 16)}`
+      : spec.label;
+    return {
+      ...grp,
+      avgPitch,
+      spec,
+      displayName: customLabel
+    };
+  });
 
-  // Build up to 3 distinct patterns from the active bars of the MIDI file
-  const cleanTitle = fileName.replace(/\.(mid|midi)$/i, '').substring(0, 18);
-  const patternColors = ['#f97316', '#06b6d4', '#a855f7'];
-  const selectedBars = [
-    activeBars[0],
-    activeBars[Math.min(1, activeBars.length - 1)],
-    activeBars[Math.min(2, activeBars.length - 1)]
+  // Auto-select the best master synth preset to match the primary lead instrument of the MIDI file
+  if (activeInstruments.length > 0 && activeInstruments[0].spec.presetId) {
+    const primaryPreset = synth.presets.find((p) => p.id === activeInstruments[0].spec.presetId);
+    if (primaryPreset) {
+      Object.assign(synth.params, primaryPreset.params);
+    }
+  }
+
+  // Separate any GM Channel 10 Drum hits by drum type (ONLY if present in the MIDI file — never add fake drums!)
+  const drumStreams = [
+    { id: 'drum_kick', name: '🥁 MIDI Kick Drum', sample: 'kick', volume: 1.0, filter: (m) => m === 35 || m === 36 },
+    { id: 'drum_snare', name: '🥁 MIDI Snare / Rim', sample: 'snare', volume: 0.85, filter: (m) => m === 38 || m === 40 || m === 37 },
+    { id: 'drum_hihat', name: '🥁 MIDI Hi-Hat', sample: 'hihat', volume: 0.65, filter: (m) => m === 42 || m === 44 || m === 46 },
+    { id: 'drum_clap', name: '🥁 MIDI Clap / Perc', sample: 'clap', volume: 0.8, filter: (m) => m === 39 || (m >= 60 && m <= 70) },
+    { id: 'drum_crash', name: '🥁 MIDI Cymbal / Crash', sample: 'crash', volume: 0.7, filter: (m) => m === 49 || m === 51 || m === 55 || m === 57 }
+  ].map((ds) => ({
+    ...ds,
+    notes: drumNotes.filter((n) => ds.filter(n.midi))
+  })).filter((ds) => ds.notes.length > 0);
+
+  // Determine how many bars (up to 16) exist in the MIDI file
+  let maxBarFound = 0;
+  notes.forEach((n) => {
+    const relTick = Math.max(0, n.tick - startBarOffsetTick);
+    const step = Math.round(relTick / ticksPer16th);
+    const barIdx = Math.floor(step / 16);
+    if (barIdx < 16 && barIdx > maxBarFound) maxBarFound = barIdx;
+  });
+  const totalSongBars = Math.max(1, Math.min(16, maxBarFound + 1));
+
+  const patternColors = [
+    '#f97316', '#06b6d4', '#a855f7', '#10b981',
+    '#38bdf8', '#f59e0b', '#ec4899', '#84cc16',
+    '#f97316', '#06b6d4', '#a855f7', '#10b981',
+    '#38bdf8', '#f59e0b', '#ec4899', '#84cc16'
   ];
 
-  // If all melodic notes ended up in Lead and Bass is empty, mirror root bass notes an octave down on beat steps
-  selectedBars.forEach((b) => {
-    const hasBass = b.bassSteps.some(Boolean);
-    const hasLead = b.leadSteps.some(Boolean);
-    if (!hasBass && hasLead) {
-      for (let s = 0; s < 16; s += 2) {
-        if (b.leadSteps[s]) {
-          b.bassSteps[s] = 1;
-          const m = synth.noteToMidi(b.leadNotes[s]);
-          b.bassNotes[s] = midiNumberToName(Math.max(36, m - 24));
+  // 2. Build a completely FRESH array of Patterns (Pat 1 .. Pat N) — wiping all default factory patterns!
+  const newPatterns = [];
+
+  for (let barIdx = 0; barIdx < totalSongBars; barIdx++) {
+    const patId = `pat_${barIdx + 1}`;
+    const channelsForBar = [];
+
+    // Add each separated Melodic Instrument channel
+    activeInstruments.forEach((inst, instIdx) => {
+      const steps = new Array(16).fill(0);
+      const stepNotes = new Array(16).fill(midiNumberToName(Math.round(inst.avgPitch)));
+      const stepDurations = new Array(16).fill(1);
+
+      inst.notes.forEach((n) => {
+        const relTick = Math.max(0, n.tick - startBarOffsetTick);
+        const totalStep = Math.round(relTick / ticksPer16th);
+        const b = Math.floor(totalStep / 16);
+        const s = totalStep % 16;
+        if (b === barIdx && s >= 0 && s < 16) {
+          steps[s] = 1;
+          stepNotes[s] = midiNumberToName(n.midi);
+          stepDurations[s] = Math.max(1, Math.min(8, Math.round(n.durationTicks / ticksPer16th)));
         }
-      }
-    } else if (hasBass && !hasLead) {
-      for (let s = 0; s < 16; s++) {
-        if (b.bassSteps[s]) {
-          b.leadSteps[s] = 1;
-          const m = synth.noteToMidi(b.bassNotes[s]);
-          b.leadNotes[s] = midiNumberToName(Math.min(84, m + 12));
+      });
+
+      channelsForBar.push({
+        id: `midi_inst_${instIdx}`,
+        name: inst.displayName,
+        type: inst.spec.type,
+        note: midiNumberToName(Math.round(inst.avgPitch)),
+        stepNotes,
+        stepDurations,
+        timbre: inst.spec.timbre,
+        volume: inst.spec.type === 'bass' ? 0.92 : 0.85,
+        defaultVolume: inst.spec.type === 'bass' ? 0.92 : 0.85,
+        mute: false,
+        solo: false,
+        steps
+      });
+    });
+
+    // Add only the Drum channels that actually exist in the MIDI file
+    drumStreams.forEach((ds) => {
+      const steps = new Array(16).fill(0);
+      ds.notes.forEach((n) => {
+        const relTick = Math.max(0, n.tick - startBarOffsetTick);
+        const totalStep = Math.round(relTick / ticksPer16th);
+        const b = Math.floor(totalStep / 16);
+        const s = totalStep % 16;
+        if (b === barIdx && s >= 0 && s < 16) {
+          steps[s] = 1;
         }
-      }
-    }
+      });
 
-    if (!hasAnyDrums) {
-      b.kickSteps = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
-      b.hihatSteps = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
-    }
-  });
+      channelsForBar.push({
+        id: ds.id,
+        name: ds.name,
+        type: 'drum',
+        sample: ds.sample,
+        volume: ds.volume,
+        defaultVolume: ds.volume,
+        mute: false,
+        solo: false,
+        steps
+      });
+    });
 
-  // Update synth patterns
-  selectedBars.forEach((barSource, idx) => {
-    const patId = `pat_${idx + 1}`;
-    const existingPat = synth.patterns.find((p) => p.id === patId);
-    if (existingPat) {
-      existingPat.name = `Pattern ${idx + 1}: ${cleanTitle} (Bar ${barSource.barIdx + 1})`;
-      existingPat.color = patternColors[idx % patternColors.length];
-      existingPat.channels = synth.createDefaultChannels([
-        [...barSource.leadSteps],
-        [...barSource.bassSteps],
-        [...barSource.kickSteps],
-        [...barSource.snareSteps],
-        [...barSource.hihatSteps],
-        [...barSource.sub808Steps],
-        [...barSource.clapSteps],
-        [...barSource.crashSteps]
-      ]);
-      // Populate per-step note pitches
-      existingPat.channels[0].stepNotes = [...barSource.leadNotes];
-      existingPat.channels[1].stepNotes = [...barSource.bassNotes];
-    }
-  });
+    newPatterns.push({
+      id: patId,
+      name: `Bar ${barIdx + 1}: ${cleanTitle}`,
+      color: patternColors[barIdx % patternColors.length],
+      channels: channelsForBar
+    });
+  }
 
-  // Populate the 16-Bar Song Playlist Arranger to cycle through the imported MIDI bars
-  synth.playlistTracks[0].bars = Array.from({ length: 16 }, (_, i) => `pat_${(i % Math.min(3, activeBars.length)) + 1}`);
-  synth.playlistTracks[1].bars = Array.from({ length: 16 }, (_, i) => `pat_${(i % Math.min(3, activeBars.length)) + 1}`);
-  synth.playlistTracks[2].bars = Array.from({ length: 16 }, (_, i) => `pat_${(i % Math.min(3, activeBars.length)) + 1}`);
-  synth.playlistTracks[3].bars = Array.from({ length: 16 }, (_, i) => (i % 4 === 0 ? 'pat_1' : null));
-
-  synth.bpm = bpm;
+  // Replace synth.patterns with ONLY the clean MIDI patterns
+  synth.patterns = newPatterns;
   synth.activePatternId = 'pat_1';
+  synth.bpm = bpm;
+  synth.songLoopBars = totalSongBars;
+
+  // 3. Build a clean, separated 16-Bar Song Playlist Arranger matching the MIDI instruments
+  const numPlaylistRows = Math.max(1, Math.min(4, activeInstruments.length + (drumStreams.length > 0 ? 1 : 0)));
+  const cleanPlaylistTracks = [];
+
+  for (let tIdx = 0; tIdx < 4; tIdx++) {
+    let rowLabel = `Track ${tIdx + 1} (Empty)`;
+    let isActiveRow = false;
+
+    if (tIdx < activeInstruments.length) {
+      rowLabel = activeInstruments[tIdx].displayName;
+      isActiveRow = true;
+    } else if (tIdx === activeInstruments.length && drumStreams.length > 0) {
+      rowLabel = '🥁 MIDI Drums & Percussion';
+      isActiveRow = true;
+    }
+
+    const bars = new Array(16).fill(null);
+    if (isActiveRow) {
+      for (let b = 0; b < totalSongBars; b++) {
+        bars[b] = `pat_${b + 1}`;
+      }
+    }
+
+    cleanPlaylistTracks.push({
+      id: `track_${tIdx + 1}`,
+      name: rowLabel,
+      bars
+    });
+  }
+
+  synth.playlistTracks = cleanPlaylistTracks;
 
   return {
     bpm,
     noteCount: notes.length,
-    activeBarCount: activeBars.length,
+    activeBarCount: totalSongBars,
+    instrumentCount: activeInstruments.length + drumStreams.length,
+    primaryInstrument: activeInstruments[0]?.displayName || 'GM Percussion',
+    primaryPresetId: activeInstruments[0]?.spec?.presetId || 'init_saw',
     cleanTitle
   };
 }
@@ -379,7 +649,7 @@ export function exportSynthToMidiBlob(synth) {
     crash: 49
   };
 
-  const totalBarsToExport = synth.playMode === 'SONG' ? synth.totalBars : 2;
+  const totalBarsToExport = synth.playMode === 'SONG' ? (synth.songLoopBars || synth.totalBars) : 1;
 
   for (let bar = 0; bar < totalBarsToExport; bar++) {
     let patternsAtBar = [];
@@ -398,17 +668,18 @@ export function exportSynthToMidiBlob(synth) {
 
     for (let step = 0; step < 16; step++) {
       const stepStartTick = (bar * 16 + step) * ticksPer16th;
-      const stepEndTick = stepStartTick + Math.floor(ticksPer16th * 0.85);
 
       patternsAtBar.forEach((pat) => {
-        pat.channels.forEach((ch) => {
+        pat.channels.forEach((ch, chIdx) => {
           if (ch.mute || ch.steps[step] !== 1) return;
+          const gateSteps = (ch.stepDurations && ch.stepDurations[step]) ? ch.stepDurations[step] : 1;
+          const stepEndTick = stepStartTick + Math.floor(ticksPer16th * gateSteps * 0.85);
           const vel = Math.max(1, Math.min(127, Math.round((ch.volume || 0.85) * 115)));
 
           if (ch.type === 'synth' || ch.type === 'bass') {
             const noteStr = (ch.stepNotes && ch.stepNotes[step]) ? ch.stepNotes[step] : ch.note;
             const midiNote = synth.noteToMidi(noteStr);
-            const midiChannel = ch.type === 'bass' ? 1 : 0;
+            const midiChannel = Math.min(8, chIdx);
             events.push({ tick: stepStartTick, bytes: [0x90 | midiChannel, midiNote, vel] });
             events.push({ tick: stepEndTick, bytes: [0x80 | midiChannel, midiNote, 0] });
           } else if (ch.type === 'drum') {
@@ -421,10 +692,8 @@ export function exportSynthToMidiBlob(synth) {
     }
   }
 
-  // Sort events chronologically
   events.sort((a, b) => a.tick - b.tick);
 
-  // Encode variable-length quantity
   const encodeVarLen = (val) => {
     let buffer = val & 0x7f;
     const out = [];
@@ -448,26 +717,21 @@ export function exportSynthToMidiBlob(synth) {
     trackBytes.push(...encodeVarLen(delta), ...ev.bytes);
   });
 
-  // End of Track Meta Event (FF 2F 00)
   trackBytes.push(0x00, 0xff, 0x2f, 0x00);
 
-  // Build MThd (14 bytes) + MTrk header (8 bytes) + trackBytes
   const totalLength = 14 + 8 + trackBytes.length;
   const outBuf = new Uint8Array(totalLength);
   const view = new DataView(outBuf.buffer);
 
-  // MThd
   outBuf.set([0x4d, 0x54, 0x68, 0x64], 0);
   view.setUint32(4, 6, false);
-  view.setUint16(8, 0, false); // Format 0
-  view.setUint16(10, 1, false); // 1 Track
+  view.setUint16(8, 0, false);
+  view.setUint16(10, 1, false);
   view.setUint16(12, ticksPerBeat, false);
 
-  // MTrk
   outBuf.set([0x4d, 0x54, 0x72, 0x6b], 14);
   view.setUint32(18, trackBytes.length, false);
   outBuf.set(trackBytes, 22);
 
   return new Blob([outBuf], { type: 'audio/midi' });
 }
-

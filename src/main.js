@@ -154,25 +154,38 @@ function initPlaylistUI() {
       slot.dataset.track = trackIdx;
       slot.dataset.bar = barIdx;
 
+      const applySlotPatternStyle = (el, patId) => {
+        if (!patId) {
+          el.className = 'track-bar-slot';
+          el.style.background = '';
+          el.style.borderColor = '';
+          el.style.color = '';
+          el.style.boxShadow = '';
+          el.textContent = '';
+          return;
+        }
+        el.className = `track-bar-slot filled-${patId}`;
+        const patObj = synth.patterns.find(p => p.id === patId);
+        const col = patObj?.color || '#f97316';
+        el.style.background = `linear-gradient(135deg, ${col}cc 0%, ${col}99 100%)`;
+        el.style.borderColor = col;
+        el.style.color = '#fff';
+        el.style.boxShadow = `0 0 8px ${col}66`;
+        el.textContent = patObj ? patObj.name.split(':')[0] : patId;
+      };
+
       if (assignedPatId) {
-        slot.classList.add(`filled-${assignedPatId}`);
-        const patObj = synth.patterns.find(p => p.id === assignedPatId);
-        slot.textContent = patObj ? patObj.name.split(':')[0] : assignedPatId;
+        applySlotPatternStyle(slot, assignedPatId);
       }
 
       // Click to paint or remove pattern
       slot.addEventListener('click', () => {
         if (track.bars[barIdx] === synth.activePatternId) {
-          // Erase
           track.bars[barIdx] = null;
-          slot.className = 'track-bar-slot';
-          slot.textContent = '';
+          applySlotPatternStyle(slot, null);
         } else {
-          // Paint active pattern
           track.bars[barIdx] = synth.activePatternId;
-          slot.className = `track-bar-slot filled-${synth.activePatternId}`;
-          const patObj = synth.patterns.find(p => p.id === synth.activePatternId);
-          slot.textContent = patObj ? patObj.name.split(':')[0] : synth.activePatternId;
+          applySlotPatternStyle(slot, synth.activePatternId);
         }
       });
 
@@ -506,12 +519,24 @@ function initTransport() {
   });
 
   const handlePlaybackTick = (tickInfo) => {
-    // Sequencer step highlights
-    document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
-    document.querySelectorAll(`.step-btn[data-step="${tickInfo.step}"]`).forEach(b => b.classList.add('current-step-tick'));
-
-    // Song mode playlist highlights
+    // Song mode playlist highlights & live Channel Rack sync
     if (tickInfo.mode === 'SONG') {
+      if (tickInfo.step === 0) {
+        // Find which pattern is playing at this bar so the Channel Rack shows the live notes
+        let barPatId = null;
+        for (const tr of synth.playlistTracks) {
+          if (tr.bars[tickInfo.bar]) {
+            barPatId = tr.bars[tickInfo.bar];
+            break;
+          }
+        }
+        if (barPatId && synth.activePatternId !== barPatId) {
+          synth.activePatternId = barPatId;
+          if (patDropdown) patDropdown.value = barPatId;
+          initSequencerUI();
+        }
+      }
+
       document.querySelectorAll('.ruler-bar-tick').forEach(t => t.classList.remove('current-bar-tick'));
       const activeRuler = document.querySelector(`.ruler-bar-tick[data-bar="${tickInfo.bar}"]`);
       if (activeRuler) activeRuler.classList.add('current-bar-tick');
@@ -519,6 +544,10 @@ function initTransport() {
       document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
       document.querySelectorAll(`.track-bar-slot[data-bar="${tickInfo.bar}"]`).forEach(s => s.classList.add('current-bar-active'));
     }
+
+    // Sequencer step highlights
+    document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
+    document.querySelectorAll(`.step-btn[data-step="${tickInfo.step}"]`).forEach(b => b.classList.add('current-step-tick'));
   };
 
   const updatePlayBtnUI = (isPlaying) => {
@@ -608,42 +637,62 @@ function initTransport() {
         document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
       }
 
-      // 4. If no active live recording was captured, synthesize a high-quality 2-bar bounce of the active pattern
+      // 4. If no active live recording was captured, synthesize a high-quality bounce of the active Song or Pattern
       if (!audioBase64) {
         sendDawBtn.textContent = 'RENDERING STEM...';
         try {
-          const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 44100 * 4, 44100);
-          const activePat = synth.getActivePattern();
+          const barsToRender = synth.playMode === 'SONG' ? Math.min(8, synth.songLoopBars || 4) : 2;
           const stepSec = (60 / synth.bpm) / 4;
-          for (let step = 0; step < 16 * 2; step++) {
-            const stepIdx = step % 16;
-            const t = step * stepSec;
-            activePat.channels.forEach(ch => {
-              if (ch.steps[stepIdx] === 1 && !ch.mute) {
-                if (ch.type === 'drum' && synth.drumBuffers[ch.sample]) {
-                  const s = offlineCtx.createBufferSource();
-                  s.buffer = synth.drumBuffers[ch.sample];
-                  const g = offlineCtx.createGain();
-                  g.gain.value = ch.volume || 1.0;
-                  s.connect(g);
-                  g.connect(offlineCtx.destination);
-                  s.start(t);
-                } else if (ch.type === 'synth' || ch.type === 'bass') {
-                  const osc = offlineCtx.createOscillator();
-                  osc.type = ch.type === 'bass' ? 'sawtooth' : 'square';
-                  const note = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
-                  osc.frequency.setValueAtTime(synth.midiToFreq(synth.noteToMidi(note)), t);
-                  const env = offlineCtx.createGain();
-                  env.gain.setValueAtTime(0, t);
-                  env.gain.linearRampToValueAtTime(0.7 * (ch.volume || 1.0), t + 0.01);
-                  env.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-                  osc.connect(env);
-                  env.connect(offlineCtx.destination);
-                  osc.start(t);
-                  osc.stop(t + 0.18);
+          const totalDurSec = Math.max(2, barsToRender * 16 * stepSec + 0.5);
+          const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
+            2,
+            Math.ceil(44100 * totalDurSec),
+            44100
+          );
+
+          for (let bar = 0; bar < barsToRender; bar++) {
+            const patForBar = synth.playMode === 'SONG'
+              ? (synth.patterns[bar % synth.patterns.length] || synth.getActivePattern())
+              : synth.getActivePattern();
+
+            for (let stepIdx = 0; stepIdx < 16; stepIdx++) {
+              const t = (bar * 16 + stepIdx) * stepSec;
+              patForBar.channels.forEach(ch => {
+                if (ch.steps[stepIdx] === 1 && !ch.mute) {
+                  if (ch.type === 'drum' && synth.drumBuffers[ch.sample]) {
+                    const s = offlineCtx.createBufferSource();
+                    s.buffer = synth.drumBuffers[ch.sample];
+                    const g = offlineCtx.createGain();
+                    g.gain.value = ch.volume || 1.0;
+                    s.connect(g);
+                    g.connect(offlineCtx.destination);
+                    s.start(t);
+                  } else if (ch.type === 'synth' || ch.type === 'bass') {
+                    const osc = offlineCtx.createOscillator();
+                    osc.type = ch.timbre?.osc1Wave || (ch.type === 'bass' ? 'sawtooth' : 'square');
+                    const note = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
+                    const gateSteps = (ch.stepDurations && ch.stepDurations[stepIdx]) ? ch.stepDurations[stepIdx] : 1;
+                    const noteDur = Math.max(0.12, gateSteps * stepSec * 0.88);
+                    osc.frequency.setValueAtTime(synth.midiToFreq(synth.noteToMidi(note)), t);
+
+                    const filter = offlineCtx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.setValueAtTime(ch.timbre?.cutoff || 2400, t);
+
+                    const env = offlineCtx.createGain();
+                    env.gain.setValueAtTime(0.0001, t);
+                    env.gain.linearRampToValueAtTime(0.55 * (ch.volume || 0.85), t + 0.01);
+                    env.gain.exponentialRampToValueAtTime(0.001, t + noteDur);
+
+                    osc.connect(filter);
+                    filter.connect(env);
+                    env.connect(offlineCtx.destination);
+                    osc.start(t);
+                    osc.stop(t + noteDur + 0.03);
+                  }
                 }
-              }
-            });
+              });
+            }
           }
 
           const renderedBuffer = await offlineCtx.startRendering();
@@ -951,54 +1000,82 @@ function initMidiFileLoader() {
   const handleMidiFile = async (file) => {
     if (!file) return;
     try {
+      // Stop any existing playback first for a completely clean slate
+      if (synth.isPlaying) {
+        const playBtn = document.getElementById('btn-seq-play');
+        if (playBtn) playBtn.click();
+      }
+
       const arrayBuffer = await file.arrayBuffer();
       const parsed = parseStandardMidiFile(arrayBuffer);
       const summary = mapMidiToSynthPatterns(parsed, synth, file.name);
 
-      // Update Pattern Selector dropdown labels
+      // Rebuild Pattern Selector dropdown completely to show all clean MIDI bars (Bar 1 .. Bar N)
       const patDropdown = document.getElementById('pattern-select-dropdown');
       if (patDropdown) {
-        synth.patterns.forEach((p, idx) => {
-          if (patDropdown.options[idx]) {
-            patDropdown.options[idx].textContent = p.name;
-          }
+        patDropdown.innerHTML = '';
+        synth.patterns.forEach((p) => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          patDropdown.appendChild(opt);
         });
         patDropdown.value = 'pat_1';
       }
 
-      // Update BPM input
+      // Sync Preset Dropdown to the auto-detected primary MIDI instrument patch
+      const presetDropdown = document.getElementById('synth-preset-dropdown');
+      if (presetDropdown && summary.primaryPresetId) {
+        presetDropdown.value = summary.primaryPresetId;
+        const p = synth.presets.find((pr) => pr.id === summary.primaryPresetId);
+        if (p) {
+          const osc1El = document.getElementById('osc1-wave');
+          const osc2El = document.getElementById('osc2-wave');
+          if (osc1El) osc1El.value = p.params.osc1Wave;
+          if (osc2El) osc2El.value = p.params.osc2Wave;
+        }
+      }
+
+      // Update BPM input automatically
       const bpmInput = document.getElementById('seq-bpm');
       if (bpmInput) bpmInput.value = summary.bpm;
 
       // Update Brush badge
       const brushBadge = document.getElementById('brush-badge');
-      if (brushBadge) {
+      if (brushBadge && synth.patterns[0]) {
         brushBadge.textContent = synth.patterns[0].name.split(':')[0];
+        brushBadge.style.color = synth.patterns[0].color;
+        brushBadge.style.borderColor = synth.patterns[0].color;
       }
 
-      // Refresh Sequencer & Playlist UI
+      // Refresh Sequencer & Playlist UI with the clean separated instruments
       initSequencerUI();
       initPlaylistUI();
 
-      // Switch to SONG mode if multiple bars were imported
+      // Switch to SONG mode if multiple bars were imported, or PAT mode for 1-bar loop
+      const btnPat = document.getElementById('btn-mode-pat');
+      const btnSong = document.getElementById('btn-mode-song');
       if (summary.activeBarCount > 1) {
         synth.playMode = 'SONG';
-        const btnPat = document.getElementById('btn-mode-pat');
-        const btnSong = document.getElementById('btn-mode-song');
         if (btnPat && btnSong) {
           btnPat.classList.remove('active');
           btnSong.classList.add('active');
         }
+      } else {
+        synth.playMode = 'PAT';
+        if (btnPat && btnSong) {
+          btnPat.classList.add('active');
+          btnSong.classList.remove('active');
+        }
       }
 
-      showSynthToast(`🎹 Loaded "${file.name}" (${summary.noteCount} notes · ${summary.bpm} BPM · ${summary.activeBarCount} bars)`);
+      showSynthToast(
+        `🎹 Clean MIDI Loaded: "${summary.cleanTitle}" · ${summary.instrumentCount} Instruments · ${summary.bpm} BPM · ${summary.activeBarCount} Bars`
+      );
 
-      // Automatically start playback so the user hears their imported MIDI right away
-      if (synth.isPlaying) {
-        synth.stopPlayback();
-      }
+      // Start playing the fresh MIDI song immediately
       const playBtn = document.getElementById('btn-seq-play');
-      if (playBtn) {
+      if (playBtn && !synth.isPlaying) {
         playBtn.click();
       }
     } catch (err) {

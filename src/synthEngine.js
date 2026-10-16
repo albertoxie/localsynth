@@ -676,6 +676,74 @@ export class SynthEngine {
     this.activeVoices.delete(midiNote);
   }
 
+  // Play Instrument-Specific Polyphonic Voice (for separated MIDI instruments & channels)
+  playInstrumentVoice(midiNote, velocity = 0.85, durationMs = 150, timbre = null) {
+    this.ensureContext();
+    if (!timbre) {
+      this.noteOn(midiNote, velocity);
+      setTimeout(() => this.noteOff(midiNote), durationMs);
+      return;
+    }
+
+    const freq = this.midiToFreq(midiNote);
+    const now = this.ctx.currentTime;
+    const durSec = Math.max(0.06, durationMs / 1000);
+
+    const osc1 = this.ctx.createOscillator();
+    osc1.type = timbre.osc1Wave || 'sawtooth';
+    const osc1Freq = freq * Math.pow(2, (timbre.osc1Octave || 0));
+    osc1.frequency.setValueAtTime(osc1Freq, now);
+
+    const osc1Gain = this.ctx.createGain();
+    osc1Gain.gain.value = timbre.osc1Gain ?? 0.65;
+    osc1.connect(osc1Gain);
+
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = timbre.osc2Wave || 'square';
+    const osc2Freq = freq * Math.pow(2, (timbre.osc2Octave || 0));
+    osc2.frequency.setValueAtTime(osc2Freq, now);
+    osc2.detune.setValueAtTime(timbre.detune ?? 8, now);
+
+    const osc2Gain = this.ctx.createGain();
+    osc2Gain.gain.value = timbre.osc2Gain ?? 0.45;
+    osc2.connect(osc2Gain);
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = timbre.resonance ?? 3.5;
+
+    const baseCut = Math.max(40, Math.min(18000, timbre.cutoff ?? 2200));
+    const peakCut = Math.max(40, Math.min(18000, baseCut + (timbre.envMod ?? 2000) * velocity));
+    const attack = timbre.attack ?? 0.01;
+    const decay = timbre.decay ?? 0.2;
+    const release = timbre.release ?? 0.18;
+
+    filter.frequency.setValueAtTime(baseCut, now);
+    filter.frequency.linearRampToValueAtTime(peakCut, now + attack);
+    filter.frequency.exponentialRampToValueAtTime(baseCut, now + attack + decay);
+
+    osc1Gain.connect(filter);
+    osc2Gain.connect(filter);
+
+    const amp = this.ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, now);
+    amp.gain.linearRampToValueAtTime(velocity * 0.65, now + attack);
+    amp.gain.exponentialRampToValueAtTime(Math.max(0.001, velocity * 0.45), now + attack + decay);
+    amp.gain.exponentialRampToValueAtTime(0.0001, now + durSec + release);
+
+    filter.connect(amp);
+    amp.connect(this.masterGain);
+    amp.connect(this.delayNode);
+    amp.connect(this.reverbConvolver);
+    amp.connect(this.chorusDelay);
+
+    osc1.start(now);
+    osc2.start(now);
+    const stopAt = now + durSec + release + 0.05;
+    osc1.stop(stopAt);
+    osc2.stop(stopAt);
+  }
+
   // Playback Control: Supports PAT (Pattern Loop) & SONG (16-Bar Playlist)
   startPlayback(onTickCallback) {
     this.ensureContext();
@@ -695,13 +763,14 @@ export class SynthEngine {
         this.currentStep = (this.currentStep + 1) % 16;
       } else {
         // Song Playlist Mode
+        const activeBarLimit = this.songLoopBars || this.totalBars;
         this.triggerSongStep(this.currentSongBar, this.currentStep);
         if (onTickCallback) onTickCallback({ mode: 'SONG', bar: this.currentSongBar, step: this.currentStep });
 
         this.currentStep++;
         if (this.currentStep >= 16) {
           this.currentStep = 0;
-          this.currentSongBar = (this.currentSongBar + 1) % this.totalBars;
+          this.currentSongBar = (this.currentSongBar + 1) % activeBarLimit;
         }
       }
     }, stepDurationMs);
@@ -719,6 +788,7 @@ export class SynthEngine {
 
   triggerPatternStep(pattern, stepIndex) {
     const hasSolo = pattern.channels.some(c => c.solo);
+    const stepDurationMs = (60000 / this.bpm) / 4;
 
     pattern.channels.forEach(ch => {
       if (ch.mute) return;
@@ -727,14 +797,12 @@ export class SynthEngine {
       if (ch.steps[stepIndex] === 1) {
         // Read step-specific note or fallback to channel note
         const noteToPlay = (ch.stepNotes && ch.stepNotes[stepIndex]) ? ch.stepNotes[stepIndex] : ch.note;
-        if (ch.type === 'synth') {
+        const gateSteps = (ch.stepDurations && ch.stepDurations[stepIndex]) ? ch.stepDurations[stepIndex] : 1;
+        const noteDurMs = Math.max(90, gateSteps * stepDurationMs * 0.88);
+
+        if (ch.type === 'synth' || ch.type === 'bass') {
           const midi = this.noteToMidi(noteToPlay);
-          this.noteOn(midi, ch.volume || 0.9);
-          setTimeout(() => this.noteOff(midi), 120);
-        } else if (ch.type === 'bass') {
-          const midi = this.noteToMidi(noteToPlay);
-          this.noteOn(midi, ch.volume || 1.0);
-          setTimeout(() => this.noteOff(midi), 140);
+          this.playInstrumentVoice(midi, ch.volume || 0.9, noteDurMs, ch.timbre || null);
         } else if (ch.type === 'drum') {
           this.playDrumSample(ch.sample, ch.volume);
         }
