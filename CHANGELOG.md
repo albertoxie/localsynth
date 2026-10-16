@@ -4,6 +4,17 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [1.9.0] - 2026-10-16
+### Added
+- **Standard MIDI File (`.mid` / `.midi`) Importer & Drag-and-Drop Engine (`src/midiFileParser.js`)**:
+  - Added `📂 LOAD .MID` button in the top transport bar plus full-window drag-and-drop overlay support for any `.mid` or `.midi` file.
+  - Built zero-dependency binary SMF Format 0 & Format 1 parser (`parseStandardMidiFile`) decoding variable-length delta ticks, running status bytes, tempo meta events (`0x51`), and multi-track note events.
+  - Intelligent FL Studio Pattern & Playlist Mapper (`mapMidiToSynthPatterns`): automatically splits melodic MIDI voices into **Synth Lead** (`>= G3`) and **TB-303 Acid Bass** (`< G3`), maps General MIDI Channel 10 percussion notes (`35/36` Kick, `38/40` Snare, `39` Handclap, `42/44/46` Hi-Hat, `49/51` Crash) onto the 8-channel drum rack, updates project BPM, populates Patterns 1–3 and the 16-Bar Song Playlist Arranger, and starts playback automatically.
+- **Standard MIDI File Exporter (`💾 SAVE .MID`)**:
+  - Added 1-click `.mid` binary file export (`exportSynthToMidiBlob`) allowing users to save their current Pattern or 16-Bar Song Arrangement as a standard `.mid` file for use in any external DAW or hardware sequencer.
+
+---
+
 ## [1.8.0] - 2026-10-16
 ### Added & Fixed
 - **Horizontal Left/Right Rotary Knob Physics**:

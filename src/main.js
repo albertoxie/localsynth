@@ -1,4 +1,5 @@
 import { SynthEngine } from './synthEngine.js';
+import { parseStandardMidiFile, mapMidiToSynthPatterns, exportSynthToMidiBlob } from './midiFileParser.js';
 
 const synth = new SynthEngine();
 
@@ -864,16 +865,15 @@ function initMIDI() {
 
             // Note On
             if (command === 0x90 && data2 > 0) {
-              const noteName = midiNumberToNoteName(data1);
-              synth.noteOn(noteName);
-              const keyEl = document.querySelector(`[data-note="${noteName}"]`);
+              const vel = Math.max(0.2, data2 / 127);
+              synth.noteOn(data1, vel);
+              const keyEl = document.querySelector(`[data-midi="${data1}"]`);
               if (keyEl) keyEl.classList.add('active');
             }
             // Note Off (or Note On with 0 velocity)
             else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
-              const noteName = midiNumberToNoteName(data1);
-              synth.noteOff(noteName);
-              const keyEl = document.querySelector(`[data-note="${noteName}"]`);
+              synth.noteOff(data1);
+              const keyEl = document.querySelector(`[data-midi="${data1}"]`);
               if (keyEl) keyEl.classList.remove('active');
             }
             // Control Change (CC) -> Filter Cutoff (CC 1 Mod Wheel or CC 74 Cutoff) & Resonance (CC 71)
@@ -882,8 +882,7 @@ function initMIDI() {
               if (data1 === 1 || data1 === 74 || data1 === 16) {
                 const freq = 40 * Math.pow(18000 / 40, norm);
                 synth.params.filterCutoff = freq;
-                synth.updateFilter();
-                const knob = document.getElementById('knob-cutoff');
+                const knob = document.getElementById('knob-filter-cutoff');
                 if (knob) {
                   const deg = (norm * 270) - 135;
                   knob.dataset.deg = deg;
@@ -891,9 +890,8 @@ function initMIDI() {
                 }
               } else if (data1 === 71 || data1 === 17) {
                 const res = norm * 22;
-                synth.params.filterRes = res;
-                synth.updateFilter();
-                const knob = document.getElementById('knob-resonance');
+                synth.params.filterResonance = res;
+                const knob = document.getElementById('knob-filter-res');
                 if (knob) {
                   const deg = (norm * 270) - 135;
                   knob.dataset.deg = deg;
@@ -918,6 +916,163 @@ function initMIDI() {
   }
 }
 
+// Show Studio Toast Notification
+function showSynthToast(message) {
+  let toast = document.getElementById('synth-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'synth-toast';
+    toast.className = 'synth-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 4200);
+}
+
+// Standard MIDI File (.mid / .midi) Loader & Drag-and-Drop Engine
+function initMidiFileLoader() {
+  const loadBtn = document.getElementById('btn-load-midi');
+  const fileInput = document.getElementById('midi-file-input');
+
+  // Create drag-and-drop overlay
+  const dropOverlay = document.createElement('div');
+  dropOverlay.className = 'midi-drop-overlay';
+  dropOverlay.innerHTML = `
+    <div style="font-size: 40px;">🎹</div>
+    <div>DROP .MID OR .MIDI FILE TO IMPORT INTO LOCALSYNTH</div>
+    <div style="font-size: 12px; color: var(--accent-cyan);">AUTO-MAPS MELODY, BASSLINE, DRUMS, BPM & 16-BAR SONG PLAYLIST</div>
+  `;
+  document.body.appendChild(dropOverlay);
+
+  const handleMidiFile = async (file) => {
+    if (!file) return;
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const parsed = parseStandardMidiFile(arrayBuffer);
+      const summary = mapMidiToSynthPatterns(parsed, synth, file.name);
+
+      // Update Pattern Selector dropdown labels
+      const patDropdown = document.getElementById('pattern-select-dropdown');
+      if (patDropdown) {
+        synth.patterns.forEach((p, idx) => {
+          if (patDropdown.options[idx]) {
+            patDropdown.options[idx].textContent = p.name;
+          }
+        });
+        patDropdown.value = 'pat_1';
+      }
+
+      // Update BPM input
+      const bpmInput = document.getElementById('seq-bpm');
+      if (bpmInput) bpmInput.value = summary.bpm;
+
+      // Update Brush badge
+      const brushBadge = document.getElementById('brush-badge');
+      if (brushBadge) {
+        brushBadge.textContent = synth.patterns[0].name.split(':')[0];
+      }
+
+      // Refresh Sequencer & Playlist UI
+      initSequencerUI();
+      initPlaylistUI();
+
+      // Switch to SONG mode if multiple bars were imported
+      if (summary.activeBarCount > 1) {
+        synth.playMode = 'SONG';
+        const btnPat = document.getElementById('btn-mode-pat');
+        const btnSong = document.getElementById('btn-mode-song');
+        if (btnPat && btnSong) {
+          btnPat.classList.remove('active');
+          btnSong.classList.add('active');
+        }
+      }
+
+      showSynthToast(`🎹 Loaded "${file.name}" (${summary.noteCount} notes · ${summary.bpm} BPM · ${summary.activeBarCount} bars)`);
+
+      // Automatically start playback so the user hears their imported MIDI right away
+      if (synth.isPlaying) {
+        synth.stopPlayback();
+      }
+      const playBtn = document.getElementById('btn-seq-play');
+      if (playBtn) {
+        playBtn.click();
+      }
+    } catch (err) {
+      console.error('[MIDI Import Error]', err);
+      showSynthToast(`⚠️ MIDI Load Error: ${err.message || 'Invalid .mid file'}`);
+    }
+  };
+
+  if (loadBtn && fileInput) {
+    loadBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleMidiFile(file);
+    });
+  }
+
+  const exportMidiBtn = document.getElementById('btn-export-midi');
+  if (exportMidiBtn) {
+    exportMidiBtn.addEventListener('click', () => {
+      try {
+        const blob = exportSynthToMidiBlob(synth);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `LocalSynth_${synth.playMode}_${synth.bpm}BPM.mid`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showSynthToast(`💾 Exported LocalSynth_${synth.playMode}_${synth.bpm}BPM.mid`);
+      } catch (e) {
+        console.error('[MIDI Export Error]', e);
+        showSynthToast('⚠️ Failed to export MIDI file');
+      }
+    });
+  }
+
+  // Global window drag-and-drop support for .mid / .midi files
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragDepth++;
+    dropOverlay.classList.add('active');
+  });
+
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) {
+      dropOverlay.classList.remove('active');
+    }
+  });
+
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    dropOverlay.classList.remove('active');
+    const file = e.dataTransfer?.files?.[0];
+    if (file && /\.(mid|midi)$/i.test(file.name)) {
+      handleMidiFile(file);
+    } else if (file) {
+      showSynthToast('⚠️ Please drop a valid .mid or .midi file');
+    }
+  });
+}
+
 // Boot System
 window.addEventListener('DOMContentLoaded', () => {
   initSplashScreen();
@@ -927,6 +1082,8 @@ window.addEventListener('DOMContentLoaded', () => {
   initKnobs();
   initTransport();
   initMIDI();
+  initMidiFileLoader();
   startOscilloscope();
 });
+
 

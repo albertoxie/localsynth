@@ -94,6 +94,15 @@
         🎛️ TO LOCALDAW
       </button>
 
+      <!-- Load & Export Standard MIDI File (.mid / .midi) -->
+      <button class="btn-transport btn-load-midi" id="btn-load-midi" title="Import any .mid or .midi file (or drag & drop anywhere)">
+        📂 LOAD .MID
+      </button>
+      <button class="btn-transport btn-export-midi" id="btn-export-midi" title="Export current Song or Pattern as a Standard .MID file">
+        💾 SAVE .MID
+      </button>
+      <input type="file" id="midi-file-input" accept=".mid,.midi,audio/midi,audio/x-midi" style="display: none;" />
+
       <!-- Hardware MIDI Indicator -->
       <div class="midi-status-pill" id="midi-status-pill" title="Plug in any USB MIDI Keyboard or Controller">
         <span class="midi-dot" id="midi-dot"></span>
