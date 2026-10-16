@@ -4,6 +4,25 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [1.8.0] - 2026-10-16
+### Added & Fixed
+- **Horizontal Left/Right Rotary Knob Physics**:
+  - Updated all 11 studio rotary knobs (`initKnobs`) to respond naturally to horizontal mouse dragging (`deltaX * 2.2`, `cursor: ew-resize`) and mouse wheel scrolling.
+  - Added single-click left/right half stepping: clicking the left half of a knob steps it counter-clockwise (`-15°`), while clicking the right half steps it clockwise (`+15°`).
+- **Universal Double-Click Recenter / Reset**:
+  - Double-clicking (`dblclick`) any rotary knob immediately recenters it to `0°` and restores its default studio parameter value.
+  - Double-clicking (`dblclick`) any channel volume slider in the FL Channel Rack immediately resets it to its default factory gain level.
+- **PLAY / STOP Transport Toggle**:
+  - Replaced the `PAUSE` state with a dedicated **STOP** button (`STOP` label + solid square SVG `<rect>` icon) when the sequencer is running.
+- **Web MIDI API Hardware Controller Support (`initMIDI`)**:
+  - Added plug-and-play USB MIDI keyboard and controller support via `navigator.requestMIDIAccess()`.
+  - Supports polyphonic MIDI Note On (`0x90`), Note Off (`0x80`), and MIDI CC (`0xB0`) hardware knob mapping for Filter Cutoff (`CC 1` / `CC 74` / `CC 16`) and Resonance (`CC 71` / `CC 17`), complete with a live `#midi-status-pill` activity LED in the top transport bar.
+- **Cross-Origin Popup-Safe `🎛️ TO LOCALDAW` Stem Bridge**:
+  - Opens `localdaw.com` synchronously on the user click stack (`window.open` prior to async audio rendering) so browser popup blockers never intercept the launch.
+  - Streams the rendered 16-bit 44.1kHz stereo WAV stem (`audioBase64`), BPM, and patch metadata directly across domains (`localsynth.com` -> `localdaw.com`) via `window.postMessage` (`LOCALSYNTH_STEM_EXPORT`), automatically creating a `🎹 LocalSynth Groove` track at `0:00` in LocalDAW.
+
+---
+
 ## [1.7.0] - 2026-10-16
 ### Fixed & Improved
 - **Distinct Play / Pause Icons**:
