@@ -483,7 +483,7 @@ main.synth-studio {
 
 .channel-row {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 12px;
   align-items: center;
   background: #0d1017;
@@ -1102,4 +1102,258 @@ footer.app-footer {
   transform: translateY(0);
   opacity: 1;
 }
+
+/* Program Badge & Per-Channel Instrument Selector */
+.channel-program-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.channel-program-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gm-prog-badge {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(6, 182, 212, 0.16);
+  border: 1px solid rgba(6, 182, 212, 0.45);
+  color: #22d3ee;
+  white-space: nowrap;
+}
+
+.channel-track-title {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-instrument-select {
+  background: #141924;
+  border: 1px solid #2b3548;
+  color: #f8fafc;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s ease;
+}
+
+.channel-instrument-select:hover,
+.channel-instrument-select:focus {
+  border-color: var(--accent-orange);
+}
+
+/* Scrollable Racks & Playlist Containers */
+.scrollable-rack {
+  max-height: 310px;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding-right: 4px;
+}
+
+.scrollable-playlist {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.scrollable-rack::-webkit-scrollbar,
+.scrollable-playlist::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.scrollable-rack::-webkit-scrollbar-track,
+.scrollable-playlist::-webkit-scrollbar-track {
+  background: #090c12;
+  border-radius: 4px;
+}
+
+.scrollable-rack::-webkit-scrollbar-thumb,
+.scrollable-playlist::-webkit-scrollbar-thumb {
+  background: #2d3748;
+  border-radius: 4px;
+}
+
+.scrollable-rack::-webkit-scrollbar-thumb:hover,
+.scrollable-playlist::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-orange);
+}
+
+/* Sequencer Header Action Buttons (+ Add Instrument / + Add Drum / Clear) */
+.sequencer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-rack-action {
+  background: #1a2130;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-rack-action:hover {
+  background: #263147;
+  border-color: var(--accent-cyan);
+  color: #fff;
+}
+
+.btn-rack-danger:hover {
+  border-color: var(--accent-red);
+  color: #fca5a5;
+}
+
+/* Save & Load Song Project Buttons */
+.btn-save-song {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #34d399;
+}
+
+.btn-save-song:hover {
+  background: rgba(16, 185, 129, 0.28);
+  border-color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+}
+
+.btn-load-song {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.btn-load-song:hover {
+  background: rgba(245, 158, 11, 0.28);
+  border-color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+}
+
+/* Bottom Performance Grid: 8-Pad Live MPC Drum Pad Section + Piano Keyboard */
+.bottom-performance-grid {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 1180px) {
+  .bottom-performance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drum-pad-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.drum-pads-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  flex: 1;
+}
+
+.mpc-drum-pad {
+  background: radial-gradient(circle at center, #1e2534 0%, #11151f 100%);
+  border: 2px solid #2d3748;
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.08s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.mpc-drum-pad:hover {
+  border-color: var(--pad-color, #f97316);
+  background: radial-gradient(circle at center, #262f42 0%, #151a26 100%);
+}
+
+.mpc-drum-pad.pad-active {
+  background: var(--pad-color, #f97316) !important;
+  border-color: #fff !important;
+  transform: scale(0.96);
+  box-shadow: 0 0 18px var(--pad-color, #f97316);
+}
+
+.mpc-drum-pad.pad-active .mpc-pad-name,
+.mpc-drum-pad.pad-active .mpc-pad-key,
+.mpc-drum-pad.pad-active .mpc-pad-gm {
+  color: #000 !important;
+}
+
+.mpc-pad-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.mpc-pad-key {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--pad-color, #f97316);
+}
+
+.mpc-pad-gm {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.mpc-pad-name {
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #f1f5f9;
+  text-align: left;
+  letter-spacing: 0.4px;
+  line-height: 1.15;
+}
+
+.mpc-pad-led {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pad-color, #f97316);
+  opacity: 0.7;
+}
+
 

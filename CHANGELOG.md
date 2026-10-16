@@ -4,6 +4,23 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [2.1.0] - 2026-10-16
+### Added
+- **🥁 Live 8-Pad MPC Drum Pad Rack (`initDrumPadsUI`)**:
+  - Added a dedicated 8-Pad Live MPC Drum Pad Section (`Punch 909 Kick`, `Studio Snare`, `Open 909 Hi-Hat`, `808 Sub Boom`, `Analog Clap`, `Cymbal Crash`, `909 Synth Tom`, `808 Cowbell / Rim`) next to the polyphonic keyboard.
+  - Supports mouse/touch triggering, computer keyboard number keys `[1 – 8]`, and `Shift + Click` (or `Shift + 1..8`) to punch drum hits directly into the active pattern step.
+- **🎛️ Per-Track Instrument / Program Selector & GM Program Badge (`INSTRUMENT_CATALOG`)**:
+  - Every track row in the FL Channel Rack now displays a glowing **Program Badge** (`PROG 000 · GRAND PIANO`, `PROG 038 · 303 ACID BASS`, `PROG 048 · STRING ENSEMBLE`, `PROG 062 · CS-80 BRASS`, `PROG 081 · SAWTOOTH LEAD`, `GM CH 10 · NOTE 36`, etc.) so you can immediately tell what MIDI Program each track is using.
+  - Added an interactive **Instrument Picker Dropdown** on every channel row allowing you to swap any track's instrument or drum voice on the fly with instant audio preview.
+- **📜 Scrollable Channel Rack & Song Playlist + Add Track Controls**:
+  - Both the **FL Channel Rack** (`.scrollable-rack`) and **Song Playlist Arranger** (`.scrollable-playlist`) now feature smooth vertical and horizontal studio scrollbars.
+  - Added `+ ADD INSTRUMENT`, `+ ADD DRUM`, `CLEAR PAT`, and `+ ADD TRACK ROW` buttons so you can expand your song with unlimited custom tracks.
+- **💾 Full Song Project Save & Load System (`initSongSaveLoadSystem`)**:
+  - Added `💾 SAVE SONG`, `📂 LOAD SONG`, and the `💿 SAVED SONGS...` quick-load browser bank dropdown in the top transport bar.
+  - Saves complete songs (all patterns, separated instrument programs, per-step notes, synth knob parameters, BPM, and 16-bar playlist layout) to both `localStorage` and a portable `.localsynth.json` project file (which can also be dragged and dropped onto the window).
+
+---
+
 ## [2.0.0] - 2026-10-16
 ### Added & Improved
 - **100% Clean MIDI Song Slate & Multi-Instrument Separation (`src/midiFileParser.js`, `src/synthEngine.js`)**:

@@ -4,196 +4,242 @@
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-// General MIDI 128 Instrument Families & Dedicated Synth Timbres
-export function getGmInstrumentSpec(programNumber = 0, channel = 0, avgPitch = 60, trackTitle = '') {
-  if (channel === 9) {
-    return {
-      family: 'Drums',
-      label: 'GM Percussion Kit',
-      type: 'drum',
-      color: '#f59e0b'
-    };
-  }
-
-  const prog = Math.max(0, Math.min(127, programNumber || 0));
-  const lowerTitle = (trackTitle || '').toLowerCase();
-
-  // Check if explicitly Bass by GM Program (32–39) or track name or very low average register
-  if ((prog >= 32 && prog <= 39) || lowerTitle.includes('bass') || avgPitch < 48) {
-    const bassNames = [
-      'Acoustic Bass', 'Fingered Bass', 'Picked Bass', 'Fretless Bass',
-      'Slap Bass 1', 'Slap Bass 2', 'Analog Synth Bass', 'FM Synth Bass'
-    ];
-    const name = (prog >= 32 && prog <= 39) ? bassNames[prog - 32] : 'Sub / Synth Bass';
-    return {
-      family: 'Bass',
-      label: `🎸 ${name}`,
-      type: 'bass',
-      color: '#10b981',
-      presetId: 'acid_303',
-      timbre: {
-        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.85,
-        osc2Wave: 'square', osc2Octave: -1, osc2Gain: 0.55, detune: 4,
-        cutoff: 850, resonance: 7.5, envMod: 3400,
-        attack: 0.008, decay: 0.22, release: 0.14
-      }
-    };
-  }
-
-  // Piano / Keys (0–7)
-  if (prog >= 0 && prog <= 7) {
-    const names = ['Grand Piano', 'Bright Piano', 'Electric Grand', 'Honky-Tonk', 'Rhodes EP', 'DX7 Chorused EP', 'Harpsichord', 'Clavinet'];
-    return {
-      family: 'Keys',
-      label: `🎹 ${names[prog]}`,
-      type: 'synth',
-      color: '#38bdf8',
-      presetId: 'fm_pluck',
-      timbre: {
-        osc1Wave: 'triangle', osc1Octave: 0, osc1Gain: 0.75,
-        osc2Wave: 'sine', osc2Octave: 1, osc2Gain: 0.4, detune: 6,
-        cutoff: 3400, resonance: 2.2, envMod: 2600,
-        attack: 0.008, decay: 0.35, release: 0.25
-      }
-    };
-  }
-
-  // Chromatic Percussion / Bells / Plucks (8–15)
-  if (prog >= 8 && prog <= 15) {
-    const names = ['Celesta', 'Glockenspiel', 'Music Box', 'Vibraphone', 'Marimba', 'Xylophone', 'Tubular Bells', 'Dulcimer'];
-    return {
-      family: 'Bells',
-      label: `🔔 ${names[prog - 8]}`,
-      type: 'synth',
-      color: '#e879f9',
-      presetId: 'glass_chimes',
-      timbre: {
-        osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.8,
-        osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.5, detune: 12,
-        cutoff: 5200, resonance: 3.5, envMod: 3200,
-        attack: 0.005, decay: 0.28, release: 0.35
-      }
-    };
-  }
-
-  // Organs (16–23)
-  if (prog >= 16 && prog <= 23) {
-    return {
-      family: 'Organ',
-      label: '🎹 Hammond / Drawbar Organ',
-      type: 'synth',
-      color: '#fbbf24',
-      presetId: 'juno_pad',
-      timbre: {
-        osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.75,
-        osc2Wave: 'square', osc2Octave: 1, osc2Gain: 0.35, detune: 5,
-        cutoff: 2800, resonance: 1.8, envMod: 900,
-        attack: 0.015, decay: 0.3, release: 0.2
-      }
-    };
-  }
-
-  // Guitars (24–31)
-  if (prog >= 24 && prog <= 31) {
-    const isDist = prog >= 29;
-    return {
-      family: 'Guitar',
-      label: isDist ? '🎸 Overdriven Lead Guitar' : '🎸 Pluck Synth Guitar',
-      type: 'synth',
-      color: '#f97316',
-      presetId: isDist ? 'daft_funk_lead' : 'fm_pluck',
-      timbre: {
-        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
-        osc2Wave: 'square', osc2Octave: 0, osc2Gain: 0.55, detune: 10,
-        cutoff: isDist ? 3800 : 2400, resonance: isDist ? 5.5 : 2.8, envMod: 2800,
-        attack: 0.008, decay: 0.25, release: 0.2
-      }
-    };
-  }
-
-  // Strings & Orchestral Ensemble (40–55)
-  if (prog >= 40 && prog <= 55) {
-    return {
-      family: 'Strings',
-      label: '🎻 Analog String Ensemble',
-      type: 'synth',
-      color: '#a855f7',
-      presetId: 'juno_pad',
-      timbre: {
-        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.65,
-        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.65, detune: 18,
-        cutoff: 2400, resonance: 2.0, envMod: 1600,
-        attack: 0.06, decay: 0.45, release: 0.4
-      }
-    };
-  }
-
-  // Brass & Horns (56–63)
-  if (prog >= 56 && prog <= 63) {
-    return {
-      family: 'Brass',
-      label: '🎺 CS-80 Synth Brass',
-      type: 'synth',
-      color: '#f59e0b',
-      presetId: 'blade_runner_brass',
-      timbre: {
-        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
-        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.7, detune: 15,
-        cutoff: 1800, resonance: 3.2, envMod: 3600,
-        attack: 0.035, decay: 0.4, release: 0.3
-      }
-    };
-  }
-
-  // Synth Leads (80–87)
-  if (prog >= 80 && prog <= 87) {
-    const leads = ['Square Lead', 'Sawtooth Lead', 'Calliope Lead', 'Chiff Lead', 'Charang Lead', 'Voice Lead', 'Fifths Lead', 'Bass + Lead'];
-    const isSquare = prog === 80;
-    return {
-      family: 'Synth Lead',
-      label: `⚡ ${leads[prog - 80]}`,
-      type: 'synth',
-      color: '#f97316',
-      presetId: 'init_saw',
-      timbre: {
-        osc1Wave: isSquare ? 'square' : 'sawtooth', osc1Octave: 0, osc1Gain: 0.8,
-        osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.6, detune: 12,
-        cutoff: 3200, resonance: 4.2, envMod: 3400,
-        attack: 0.01, decay: 0.28, release: 0.22
-      }
-    };
-  }
-
-  // Synth Pads (88–95)
-  if (prog >= 88 && prog <= 95) {
-    return {
-      family: 'Synth Pad',
-      label: '🌌 Warm Juno Pad',
-      type: 'synth',
-      color: '#06b6d4',
-      presetId: 'juno_pad',
-      timbre: {
-        osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.6,
-        osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.55, detune: 16,
-        cutoff: 1900, resonance: 2.5, envMod: 1800,
-        attack: 0.05, decay: 0.5, release: 0.45
-      }
-    };
-  }
-
-  // Default Poly Synth / Lead
-  return {
-    family: 'Synth',
-    label: trackTitle ? `🎹 ${trackTitle.substring(0, 18)}` : `🎹 Poly Synth (Ch ${channel + 1})`,
+// Complete Selectable Instrument & Program Catalog for per-channel dropdown selector
+export const INSTRUMENT_CATALOG = [
+  {
+    programId: 'prog_00_piano',
+    gmNumber: 0,
+    gmBadge: 'PROG 000 · GRAND PIANO',
+    label: '🎹 Grand Piano / Rhodes',
+    type: 'synth',
+    color: '#38bdf8',
+    presetId: 'fm_pluck',
+    timbre: {
+      osc1Wave: 'triangle', osc1Octave: 0, osc1Gain: 0.75,
+      osc2Wave: 'sine', osc2Octave: 1, osc2Gain: 0.4, detune: 6,
+      cutoff: 3400, resonance: 2.2, envMod: 2600,
+      attack: 0.008, decay: 0.35, release: 0.25
+    }
+  },
+  {
+    programId: 'prog_11_bells',
+    gmNumber: 11,
+    gmBadge: 'PROG 011 · VIBES / BELLS',
+    label: '🔔 Vibraphone & Chimes',
+    type: 'synth',
+    color: '#e879f9',
+    presetId: 'glass_chimes',
+    timbre: {
+      osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.8,
+      osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.5, detune: 12,
+      cutoff: 5200, resonance: 3.5, envMod: 3200,
+      attack: 0.005, decay: 0.28, release: 0.35
+    }
+  },
+  {
+    programId: 'prog_16_organ',
+    gmNumber: 16,
+    gmBadge: 'PROG 016 · DRAWBAR ORGAN',
+    label: '🎹 Hammond Drawbar Organ',
+    type: 'synth',
+    color: '#fbbf24',
+    presetId: 'juno_pad',
+    timbre: {
+      osc1Wave: 'sine', osc1Octave: 0, osc1Gain: 0.75,
+      osc2Wave: 'square', osc2Octave: 1, osc2Gain: 0.35, detune: 5,
+      cutoff: 2800, resonance: 1.8, envMod: 900,
+      attack: 0.015, decay: 0.3, release: 0.2
+    }
+  },
+  {
+    programId: 'prog_27_guitar',
+    gmNumber: 27,
+    gmBadge: 'PROG 027 · SYNTH GUITAR',
+    label: '🎸 Pluck / Lead Guitar',
+    type: 'synth',
+    color: '#f97316',
+    presetId: 'daft_funk_lead',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
+      osc2Wave: 'square', osc2Octave: 0, osc2Gain: 0.55, detune: 10,
+      cutoff: 3200, resonance: 4.5, envMod: 2800,
+      attack: 0.008, decay: 0.25, release: 0.2
+    }
+  },
+  {
+    programId: 'prog_38_acid',
+    gmNumber: 38,
+    gmBadge: 'PROG 038 · 303 ACID BASS',
+    label: '🎸 TB-303 Acid / Sub Bass',
+    type: 'bass',
+    color: '#10b981',
+    presetId: 'acid_303',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.85,
+      osc2Wave: 'square', osc2Octave: -1, osc2Gain: 0.55, detune: 4,
+      cutoff: 850, resonance: 7.5, envMod: 3400,
+      attack: 0.008, decay: 0.22, release: 0.14
+    }
+  },
+  {
+    programId: 'prog_39_reese',
+    gmNumber: 39,
+    gmBadge: 'PROG 039 · REESE SUB BASS',
+    label: '🎸 Cyberpunk Reese Bass',
+    type: 'bass',
+    color: '#10b981',
+    presetId: 'cyberpunk_reese',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: -1, osc1Gain: 0.85,
+      osc2Wave: 'sawtooth', osc2Octave: -1, osc2Gain: 0.8, detune: 22,
+      cutoff: 920, resonance: 4.0, envMod: 2200,
+      attack: 0.02, decay: 0.35, release: 0.25
+    }
+  },
+  {
+    programId: 'prog_48_strings',
+    gmNumber: 48,
+    gmBadge: 'PROG 048 · STRING ENSEMBLE',
+    label: '🎻 Analog String Ensemble',
+    type: 'synth',
+    color: '#a855f7',
+    presetId: 'juno_pad',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.65,
+      osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.65, detune: 18,
+      cutoff: 2400, resonance: 2.0, envMod: 1600,
+      attack: 0.06, decay: 0.45, release: 0.4
+    }
+  },
+  {
+    programId: 'prog_62_brass',
+    gmNumber: 62,
+    gmBadge: 'PROG 062 · CS-80 BRASS',
+    label: '🎺 CS-80 Synth Brass',
+    type: 'synth',
+    color: '#f59e0b',
+    presetId: 'blade_runner_brass',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
+      osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.7, detune: 15,
+      cutoff: 1800, resonance: 3.2, envMod: 3600,
+      attack: 0.035, decay: 0.4, release: 0.3
+    }
+  },
+  {
+    programId: 'prog_80_square',
+    gmNumber: 80,
+    gmBadge: 'PROG 080 · SQUARE LEAD',
+    label: '⚡ 8-Bit / Square Lead',
+    type: 'synth',
+    color: '#f97316',
+    presetId: 'daft_funk_lead',
+    timbre: {
+      osc1Wave: 'square', osc1Octave: 0, osc1Gain: 0.8,
+      osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.5, detune: 8,
+      cutoff: 3400, resonance: 4.5, envMod: 3200,
+      attack: 0.008, decay: 0.25, release: 0.2
+    }
+  },
+  {
+    programId: 'prog_81_saw',
+    gmNumber: 81,
+    gmBadge: 'PROG 081 · SAWTOOTH LEAD',
+    label: '⚡ Dual Sawtooth Lead',
     type: 'synth',
     color: '#f97316',
     presetId: 'init_saw',
     timbre: {
-      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.75,
-      osc2Wave: 'square', osc2Octave: 0, osc2Gain: 0.5, detune: 10,
-      cutoff: 2800, resonance: 3.5, envMod: 2800,
-      attack: 0.01, decay: 0.25, release: 0.2
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.8,
+      osc2Wave: 'sawtooth', osc2Octave: 0, osc2Gain: 0.65, detune: 12,
+      cutoff: 3200, resonance: 4.2, envMod: 3400,
+      attack: 0.01, decay: 0.28, release: 0.22
     }
+  },
+  {
+    programId: 'prog_89_pad',
+    gmNumber: 89,
+    gmBadge: 'PROG 089 · WARM JUNO PAD',
+    label: '🌌 Warm Juno-106 Pad',
+    type: 'synth',
+    color: '#06b6d4',
+    presetId: 'juno_pad',
+    timbre: {
+      osc1Wave: 'sawtooth', osc1Octave: 0, osc1Gain: 0.6,
+      osc2Wave: 'triangle', osc2Octave: 1, osc2Gain: 0.55, detune: 16,
+      cutoff: 1900, resonance: 2.5, envMod: 1800,
+      attack: 0.05, decay: 0.5, release: 0.45
+    }
+  },
+  // Drum Kit Programs
+  { programId: 'drum_kick', gmNumber: 36, gmBadge: 'GM CH 10 · NOTE 36', label: '🥁 909 Punch Kick', type: 'drum', sample: 'kick', color: '#f97316' },
+  { programId: 'drum_snare', gmNumber: 38, gmBadge: 'GM CH 10 · NOTE 38', label: '🥁 Studio Snare', type: 'drum', sample: 'snare', color: '#38bdf8' },
+  { programId: 'drum_hihat', gmNumber: 42, gmBadge: 'GM CH 10 · NOTE 42', label: '🥁 Open 909 Hi-Hat', type: 'drum', sample: 'hihat', color: '#06b6d4' },
+  { programId: 'drum_808', gmNumber: 35, gmBadge: 'GM CH 10 · NOTE 35', label: '🥁 Boom 808 Sub-Bass', type: 'drum', sample: 'sub808', color: '#10b981' },
+  { programId: 'drum_clap', gmNumber: 39, gmBadge: 'GM CH 10 · NOTE 39', label: '🥁 Analog Handclap', type: 'drum', sample: 'clap', color: '#a855f7' },
+  { programId: 'drum_crash', gmNumber: 49, gmBadge: 'GM CH 10 · NOTE 49', label: '🥁 Cymbal Crash', type: 'drum', sample: 'crash', color: '#f59e0b' },
+  { programId: 'drum_tom', gmNumber: 45, gmBadge: 'GM CH 10 · NOTE 45', label: '🥁 909 Synth Tom', type: 'drum', sample: 'tom', color: '#ec4899' },
+  { programId: 'drum_rim', gmNumber: 56, gmBadge: 'GM CH 10 · NOTE 56', label: '🥁 808 Cowbell / Rim', type: 'drum', sample: 'rim', color: '#eab308' }
+];
+
+// General MIDI 128 Instrument Families & Dedicated Synth Timbres
+export function getGmInstrumentSpec(programNumber = 0, channel = 0, avgPitch = 60, trackTitle = '') {
+  const prog = Math.max(0, Math.min(127, programNumber || 0));
+  const progStr = String(prog).padStart(3, '0');
+  const lowerTitle = (trackTitle || '').toLowerCase();
+
+  if (channel === 9) {
+    return {
+      ...INSTRUMENT_CATALOG.find(i => i.programId === 'drum_kick'),
+      gmBadge: `GM CH 10 · DRUM KIT`
+    };
+  }
+
+  if ((prog >= 32 && prog <= 39) || lowerTitle.includes('bass') || avgPitch < 48) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === (prog === 39 ? 'prog_39_reese' : 'prog_38_acid'));
+    return { ...spec, gmBadge: `PROG ${progStr} · BASS` };
+  }
+  if (prog >= 0 && prog <= 7) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_00_piano');
+    return { ...spec, gmBadge: `PROG ${progStr} · KEYS` };
+  }
+  if (prog >= 8 && prog <= 15) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_11_bells');
+    return { ...spec, gmBadge: `PROG ${progStr} · BELLS` };
+  }
+  if (prog >= 16 && prog <= 23) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_16_organ');
+    return { ...spec, gmBadge: `PROG ${progStr} · ORGAN` };
+  }
+  if (prog >= 24 && prog <= 31) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_27_guitar');
+    return { ...spec, gmBadge: `PROG ${progStr} · GUITAR` };
+  }
+  if (prog >= 40 && prog <= 55) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_48_strings');
+    return { ...spec, gmBadge: `PROG ${progStr} · STRINGS` };
+  }
+  if (prog >= 56 && prog <= 63) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_62_brass');
+    return { ...spec, gmBadge: `PROG ${progStr} · BRASS` };
+  }
+  if (prog === 80) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_80_square');
+    return { ...spec, gmBadge: `PROG ${progStr} · SQ LEAD` };
+  }
+  if (prog >= 81 && prog <= 87) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_81_saw');
+    return { ...spec, gmBadge: `PROG ${progStr} · SAW LEAD` };
+  }
+  if (prog >= 88 && prog <= 95) {
+    const spec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_89_pad');
+    return { ...spec, gmBadge: `PROG ${progStr} · PAD` };
+  }
+
+  const fallback = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_81_saw');
+  return {
+    ...fallback,
+    gmBadge: `PROG ${progStr} · CH ${channel + 1}`
   };
 }
 
@@ -531,6 +577,8 @@ export function mapMidiToSynthPatterns(parsedMidi, synth, fileName = 'MIDI Song'
       channelsForBar.push({
         id: `midi_inst_${instIdx}`,
         name: inst.displayName,
+        programId: inst.spec.programId || 'prog_81_saw',
+        gmBadge: inst.spec.gmBadge || 'PROG 081 · SYNTH',
         type: inst.spec.type,
         note: midiNumberToName(Math.round(inst.avgPitch)),
         stepNotes,
@@ -560,6 +608,8 @@ export function mapMidiToSynthPatterns(parsedMidi, synth, fileName = 'MIDI Song'
       channelsForBar.push({
         id: ds.id,
         name: ds.name,
+        programId: ds.id,
+        gmBadge: 'GM CH 10 · DRUM',
         type: 'drum',
         sample: ds.sample,
         volume: ds.volume,

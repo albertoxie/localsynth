@@ -1,5 +1,5 @@
 import { SynthEngine } from './synthEngine.js';
-import { parseStandardMidiFile, mapMidiToSynthPatterns, exportSynthToMidiBlob } from './midiFileParser.js';
+import { parseStandardMidiFile, mapMidiToSynthPatterns, exportSynthToMidiBlob, INSTRUMENT_CATALOG } from './midiFileParser.js';
 
 const synth = new SynthEngine();
 
@@ -23,13 +23,31 @@ function initSequencerUI() {
     const row = document.createElement('div');
     row.className = 'channel-row';
 
+    // Determine active program from INSTRUMENT_CATALOG
+    const currentProgId = ch.programId || (ch.type === 'drum' ? `drum_${ch.sample || 'kick'}` : (ch.type === 'bass' ? 'prog_38_acid' : 'prog_81_saw'));
+    const matchedSpec = INSTRUMENT_CATALOG.find(item => item.programId === currentProgId) || INSTRUMENT_CATALOG[0];
+    const badgeText = ch.gmBadge || matchedSpec.gmBadge || 'PROG 081';
+
     const info = document.createElement('div');
     info.className = 'channel-info';
+
+    const optionsHtml = INSTRUMENT_CATALOG.map(inst =>
+      `<option value="${inst.programId}" ${inst.programId === currentProgId ? 'selected' : ''}>${inst.label}</option>`
+    ).join('');
+
     info.innerHTML = `
       <button class="channel-btn-mute ${ch.mute ? 'active' : ''}" data-ch="${chIdx}" title="Mute Channel">M</button>
       <button class="channel-btn-solo ${ch.solo ? 'active' : ''}" data-ch="${chIdx}" title="Solo Channel">S</button>
-      <input type="range" class="channel-vol-slider" min="0" max="1" step="0.05" value="${ch.volume}" data-ch="${chIdx}" title="Channel Volume">
-      <span class="channel-name">${ch.name}</span>
+      <input type="range" class="channel-vol-slider" min="0" max="1" step="0.05" value="${ch.volume}" data-ch="${chIdx}" title="Channel Volume (Double-Click to Reset)">
+      <div class="channel-program-stack">
+        <div class="channel-program-top">
+          <span class="gm-prog-badge" title="Active MIDI Program / Instrument Channel">${badgeText}</span>
+          <span class="channel-track-title" title="${ch.name}">${ch.name}</span>
+        </div>
+        <select class="channel-instrument-select" data-ch="${chIdx}" title="Pick Instrument / Synth Program for this Track">
+          ${optionsHtml}
+        </select>
+      </div>
     `;
 
     // Mute listener
@@ -55,6 +73,45 @@ function initSequencerUI() {
       volSlider.value = ch.defaultVolume;
     });
 
+    // Instrument / Program Selector listener (updates this channel across all patterns in the song)
+    const instSelect = info.querySelector('.channel-instrument-select');
+    instSelect.addEventListener('change', (e) => {
+      const chosenId = e.target.value;
+      const spec = INSTRUMENT_CATALOG.find(item => item.programId === chosenId);
+      if (!spec) return;
+
+      // Apply chosen instrument program across all patterns for this channel index so the whole song stays consistent
+      synth.patterns.forEach(pat => {
+        const targetCh = pat.channels[chIdx];
+        if (targetCh) {
+          targetCh.programId = spec.programId;
+          targetCh.gmBadge = spec.gmBadge;
+          targetCh.name = spec.label;
+          targetCh.type = spec.type;
+          if (spec.type === 'drum') {
+            targetCh.sample = spec.sample || 'kick';
+            targetCh.timbre = null;
+          } else {
+            targetCh.timbre = { ...spec.timbre };
+            if (!targetCh.stepNotes) {
+              targetCh.stepNotes = new Array(16).fill(spec.type === 'bass' ? 'C2' : 'C4');
+            }
+          }
+        }
+      });
+
+      // Audition the newly selected instrument immediately
+      if (spec.type === 'drum') {
+        synth.playDrumSample(spec.sample || 'kick', ch.volume);
+      } else {
+        const previewMidi = spec.type === 'bass' ? 36 : 60;
+        synth.playInstrumentVoice(previewMidi, 0.9, 220, spec.timbre);
+      }
+
+      initSequencerUI();
+      showSynthToast(`🎛️ Track ${chIdx + 1} switched to ${spec.label} (${spec.gmBadge})`);
+    });
+
     row.appendChild(info);
 
     const stepsGrid = document.createElement('div');
@@ -75,15 +132,14 @@ function initSequencerUI() {
       }
 
       // Left click: toggle step
-      stepBtn.addEventListener('click', (e) => {
+      stepBtn.addEventListener('click', () => {
         ch.steps[stepIdx] = ch.steps[stepIdx] === 1 ? 0 : 1;
         stepBtn.classList.toggle('active');
         if (ch.steps[stepIdx] === 1) {
           const noteToTest = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
           if (ch.type === 'synth' || ch.type === 'bass') {
             const midi = synth.noteToMidi(noteToTest);
-            synth.noteOn(midi, 0.8);
-            setTimeout(() => synth.noteOff(midi), 150);
+            synth.playInstrumentVoice(midi, 0.85, 160, ch.timbre || null);
           } else if (ch.type === 'drum') {
             synth.playDrumSample(ch.sample, ch.volume);
           }
@@ -105,8 +161,7 @@ function initSequencerUI() {
           ch.steps[stepIdx] = 1;
           stepBtn.classList.add('active');
           const midi = synth.noteToMidi(newPitch);
-          synth.noteOn(midi, 0.85);
-          setTimeout(() => synth.noteOff(midi), 180);
+          synth.playInstrumentVoice(midi, 0.85, 180, ch.timbre || null);
         });
       }
 
@@ -1144,10 +1199,367 @@ function initMidiFileLoader() {
     const file = e.dataTransfer?.files?.[0];
     if (file && /\.(mid|midi)$/i.test(file.name)) {
       handleMidiFile(file);
+    } else if (file && /\.json$/i.test(file.name)) {
+      window.dispatchEvent(new CustomEvent('localsynth-load-song-file', { detail: file }));
     } else if (file) {
-      showSynthToast('⚠️ Please drop a valid .mid or .midi file');
+      showSynthToast('⚠️ Drop a .mid / .midi file or a .localsynth.json Song file');
     }
   });
+}
+
+// 8-Pad Live MPC Drum Pad Section (Mouse Click, Touch, and Number Keys 1–8)
+function initDrumPadsUI() {
+  const container = document.getElementById('drum-pads-container');
+  if (!container) return;
+
+  const pads = [
+    { key: '1', label: 'PUNCH 909 KICK', sample: 'kick', gm: 'NOTE 36', color: '#f97316' },
+    { key: '2', label: 'STUDIO SNARE', sample: 'snare', gm: 'NOTE 38', color: '#38bdf8' },
+    { key: '3', label: 'OPEN 909 HI-HAT', sample: 'hihat', gm: 'NOTE 42', color: '#06b6d4' },
+    { key: '4', label: '808 SUB BOOM', sample: 'sub808', gm: 'NOTE 35', color: '#10b981' },
+    { key: '5', label: 'ANALOG CLAP', sample: 'clap', gm: 'NOTE 39', color: '#a855f7' },
+    { key: '6', label: 'CYMBAL CRASH', sample: 'crash', gm: 'NOTE 49', color: '#f59e0b' },
+    { key: '7', label: '909 SYNTH TOM', sample: 'tom', gm: 'NOTE 45', color: '#ec4899' },
+    { key: '8', label: '808 COWBELL / RIM', sample: 'rim', gm: 'NOTE 56', color: '#eab308' }
+  ];
+
+  container.innerHTML = '';
+
+  const triggerPad = (pad, padEl, recordStep = false) => {
+    synth.ensureContext();
+    synth.playDrumSample(pad.sample, 0.95);
+    padEl.classList.add('pad-active');
+    clearTimeout(padEl._flashTimer);
+    padEl._flashTimer = setTimeout(() => padEl.classList.remove('pad-active'), 140);
+
+    // If Shift+Click or if recording/playing, optionally punch into the active pattern's matching drum channel
+    if (recordStep) {
+      const pat = synth.getActivePattern();
+      let drumCh = pat.channels.find(c => c.type === 'drum' && c.sample === pad.sample);
+      if (!drumCh) {
+        drumCh = {
+          id: `drum_${pad.sample}_${Date.now()}`,
+          name: `🥁 ${pad.label}`,
+          programId: `drum_${pad.sample}`,
+          gmBadge: `GM CH 10 · ${pad.gm}`,
+          type: 'drum',
+          sample: pad.sample,
+          volume: 0.9,
+          defaultVolume: 0.9,
+          mute: false,
+          solo: false,
+          steps: new Array(16).fill(0)
+        };
+        pat.channels.push(drumCh);
+      }
+      const stepToPunch = synth.isPlaying ? synth.currentStep : 0;
+      drumCh.steps[stepToPunch] = 1;
+      initSequencerUI();
+      showSynthToast(`🥁 Punched ${pad.label} at Step ${stepToPunch + 1}`);
+    }
+  };
+
+  pads.forEach((pad) => {
+    const padBtn = document.createElement('button');
+    padBtn.className = 'mpc-drum-pad';
+    padBtn.dataset.sample = pad.sample;
+    padBtn.dataset.key = pad.key;
+    padBtn.style.setProperty('--pad-color', pad.color);
+    padBtn.innerHTML = `
+      <div class="mpc-pad-top">
+        <span class="mpc-pad-key">[${pad.key}]</span>
+        <span class="mpc-pad-gm">${pad.gm}</span>
+      </div>
+      <div class="mpc-pad-name">${pad.label}</div>
+      <div class="mpc-pad-led"></div>
+    `;
+
+    padBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      triggerPad(pad, padBtn, e.shiftKey);
+    });
+
+    container.appendChild(padBtn);
+  });
+
+  // Keyboard shortcuts [1 - 8] for live finger drumming
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    const matchedPad = pads.find(p => p.key === e.key);
+    if (matchedPad) {
+      const padEl = container.querySelector(`.mpc-drum-pad[data-key="${matchedPad.key}"]`);
+      if (padEl) triggerPad(matchedPad, padEl, e.shiftKey);
+    }
+  });
+}
+
+// Add Instrument / Add Drum / Clear Pattern / Add Playlist Track Row Actions
+function initRackAndPlaylistActions() {
+  const addSynthBtn = document.getElementById('btn-add-synth-ch');
+  const addDrumBtn = document.getElementById('btn-add-drum-ch');
+  const clearPatBtn = document.getElementById('btn-clear-pattern');
+  const addPlaylistTrackBtn = document.getElementById('btn-add-playlist-track');
+
+  if (addSynthBtn) {
+    addSynthBtn.addEventListener('click', () => {
+      const defaultSpec = INSTRUMENT_CATALOG.find(i => i.programId === 'prog_81_saw') || INSTRUMENT_CATALOG[0];
+      synth.patterns.forEach((pat) => {
+        pat.channels.push({
+          id: `custom_synth_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: defaultSpec.label,
+          programId: defaultSpec.programId,
+          gmBadge: defaultSpec.gmBadge,
+          type: 'synth',
+          note: 'C4',
+          stepNotes: new Array(16).fill('C4'),
+          stepDurations: new Array(16).fill(1),
+          timbre: { ...defaultSpec.timbre },
+          volume: 0.85,
+          defaultVolume: 0.85,
+          mute: false,
+          solo: false,
+          steps: new Array(16).fill(0)
+        });
+      });
+      initSequencerUI();
+      const rack = document.getElementById('step-channels-container');
+      if (rack) rack.scrollTop = rack.scrollHeight;
+      showSynthToast('🎹 Added new Instrument Track (use dropdown on row to switch Program)');
+    });
+  }
+
+  if (addDrumBtn) {
+    addDrumBtn.addEventListener('click', () => {
+      const drumSpec = INSTRUMENT_CATALOG.find(i => i.programId === 'drum_tom') || INSTRUMENT_CATALOG[11];
+      synth.patterns.forEach((pat) => {
+        pat.channels.push({
+          id: `custom_drum_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: drumSpec.label,
+          programId: drumSpec.programId,
+          gmBadge: drumSpec.gmBadge,
+          type: 'drum',
+          sample: drumSpec.sample || 'tom',
+          volume: 0.85,
+          defaultVolume: 0.85,
+          mute: false,
+          solo: false,
+          steps: new Array(16).fill(0)
+        });
+      });
+      initSequencerUI();
+      const rack = document.getElementById('step-channels-container');
+      if (rack) rack.scrollTop = rack.scrollHeight;
+      showSynthToast('🥁 Added new Drum Track to Channel Rack');
+    });
+  }
+
+  if (clearPatBtn) {
+    clearPatBtn.addEventListener('click', () => {
+      const pat = synth.getActivePattern();
+      pat.channels.forEach(ch => {
+        ch.steps = new Array(16).fill(0);
+      });
+      initSequencerUI();
+      showSynthToast(`🧹 Cleared all steps in ${pat.name}`);
+    });
+  }
+
+  if (addPlaylistTrackBtn) {
+    addPlaylistTrackBtn.addEventListener('click', () => {
+      const nextNum = synth.playlistTracks.length + 1;
+      synth.playlistTracks.push({
+        id: `track_${nextNum}_${Date.now()}`,
+        name: `Track ${nextNum} (Custom Layer)`,
+        bars: new Array(16).fill(null)
+      });
+      initPlaylistUI();
+      const plBody = document.getElementById('playlist-container');
+      if (plBody) plBody.scrollTop = plBody.scrollHeight;
+      showSynthToast(`➕ Added Track ${nextNum} to Song Playlist Arranger`);
+    });
+  }
+}
+
+// Complete Platform Song Project Save & Load Engine (.localsynth.json + Browser LocalStorage Song Library)
+function initSongSaveLoadSystem() {
+  const saveSongBtn = document.getElementById('btn-save-song');
+  const loadSongBtn = document.getElementById('btn-load-song');
+  const songFileInput = document.getElementById('song-file-input');
+  const savedSongsDropdown = document.getElementById('saved-songs-dropdown');
+  const STORAGE_KEY = 'localsynth_saved_songs_v1';
+
+  const getSavedSongsBank = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const refreshSavedSongsDropdown = () => {
+    if (!savedSongsDropdown) return;
+    const bank = getSavedSongsBank();
+    savedSongsDropdown.innerHTML = '<option value="">💿 SAVED SONGS...</option>';
+    bank.forEach((song, idx) => {
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      opt.textContent = `🎵 ${song.title} (${song.bpm} BPM)`;
+      savedSongsDropdown.appendChild(opt);
+    });
+  };
+
+  const buildSongProjectData = (title) => ({
+    format: 'LOCALSYNTH_SONG_V2',
+    title: title || 'LocalSynth Studio Song',
+    savedAt: new Date().toISOString(),
+    bpm: synth.bpm,
+    playMode: synth.playMode,
+    songLoopBars: synth.songLoopBars || synth.totalBars,
+    activePatternId: synth.activePatternId,
+    params: { ...synth.params },
+    patterns: JSON.parse(JSON.stringify(synth.patterns)),
+    playlistTracks: JSON.parse(JSON.stringify(synth.playlistTracks))
+  });
+
+  const applySongProjectData = (project) => {
+    if (!project || !Array.isArray(project.patterns)) {
+      throw new Error('Invalid LocalSynth Song file');
+    }
+
+    if (synth.isPlaying) {
+      const playBtn = document.getElementById('btn-seq-play');
+      if (playBtn) playBtn.click();
+    }
+
+    synth.bpm = parseInt(project.bpm, 10) || 128;
+    synth.playMode = project.playMode || 'SONG';
+    synth.songLoopBars = project.songLoopBars || 16;
+    synth.patterns = project.patterns;
+    synth.activePatternId = project.activePatternId || (synth.patterns[0]?.id || 'pat_1');
+
+    if (Array.isArray(project.playlistTracks)) {
+      synth.playlistTracks = project.playlistTracks;
+    }
+    if (project.params) {
+      Object.assign(synth.params, project.params);
+    }
+
+    // Sync Pattern Dropdown
+    const patDropdown = document.getElementById('pattern-select-dropdown');
+    if (patDropdown) {
+      patDropdown.innerHTML = '';
+      synth.patterns.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        patDropdown.appendChild(opt);
+      });
+      patDropdown.value = synth.activePatternId;
+    }
+
+    // Sync BPM Input
+    const bpmInput = document.getElementById('seq-bpm');
+    if (bpmInput) bpmInput.value = synth.bpm;
+
+    // Sync Mode Buttons
+    const btnPat = document.getElementById('btn-mode-pat');
+    const btnSong = document.getElementById('btn-mode-song');
+    if (btnPat && btnSong) {
+      btnPat.classList.toggle('active', synth.playMode === 'PAT');
+      btnSong.classList.toggle('active', synth.playMode === 'SONG');
+    }
+
+    // Sync Brush Badge
+    const brushBadge = document.getElementById('brush-badge');
+    const activePat = synth.getActivePattern();
+    if (brushBadge && activePat) {
+      brushBadge.textContent = activePat.name.split(':')[0];
+      brushBadge.style.color = activePat.color;
+      brushBadge.style.borderColor = activePat.color;
+    }
+
+    initSequencerUI();
+    initPlaylistUI();
+    showSynthToast(`💿 Loaded Song "${project.title || 'Project'}" (${synth.bpm} BPM)`);
+  };
+
+  if (saveSongBtn) {
+    saveSongBtn.addEventListener('click', () => {
+      const defaultName = synth.patterns[0]?.name?.split(':')[1]?.trim() || 'My LocalSynth Track';
+      const songTitle = prompt('Enter a title to save your Song Project:', defaultName);
+      if (!songTitle || !songTitle.trim()) return;
+
+      const project = buildSongProjectData(songTitle.trim());
+
+      // 1. Save to Browser LocalStorage Song Bank
+      try {
+        const bank = getSavedSongsBank().filter(s => s.title !== project.title);
+        bank.unshift(project);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(bank.slice(0, 25)));
+        refreshSavedSongsDropdown();
+      } catch (e) {}
+
+      // 2. Also download portable .localsynth.json file to computer
+      const jsonStr = JSON.stringify(project, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeName = project.title.replace(/[^a-z0-9_-]/gi, '_');
+      a.download = `${safeName}.localsynth.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      showSynthToast(`💾 Saved Song "${project.title}" to Browser Bank & downloaded .localsynth.json`);
+    });
+  }
+
+  if (loadSongBtn && songFileInput) {
+    loadSongBtn.addEventListener('click', () => {
+      songFileInput.value = '';
+      songFileInput.click();
+    });
+
+    songFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const project = JSON.parse(text);
+        applySongProjectData(project);
+      } catch (err) {
+        showSynthToast(`⚠️ Could not load song file: ${err.message}`);
+      }
+    });
+  }
+
+  window.addEventListener('localsynth-load-song-file', async (e) => {
+    const file = e.detail;
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const project = JSON.parse(text);
+      applySongProjectData(project);
+    } catch (err) {
+      showSynthToast(`⚠️ Could not load song file: ${err.message}`);
+    }
+  });
+
+  if (savedSongsDropdown) {
+    savedSongsDropdown.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.value, 10);
+      if (isNaN(idx)) return;
+      const bank = getSavedSongsBank();
+      if (bank[idx]) {
+        applySongProjectData(bank[idx]);
+      }
+    });
+  }
+
+  refreshSavedSongsDropdown();
 }
 
 // Boot System
@@ -1155,12 +1567,16 @@ window.addEventListener('DOMContentLoaded', () => {
   initSplashScreen();
   initSequencerUI();
   initPlaylistUI();
+  initDrumPadsUI();
   initKeyboardUI();
   initKnobs();
   initTransport();
+  initRackAndPlaylistActions();
+  initSongSaveLoadSystem();
   initMIDI();
   initMidiFileLoader();
   startOscilloscope();
 });
+
 
 

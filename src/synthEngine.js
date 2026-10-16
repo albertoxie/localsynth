@@ -170,14 +170,14 @@ export class SynthEngine {
     const defaultBassPitches = ['C2','C2','D#2','F2','G2','C2','A#1','C2','C2','D#2','F2','G2','A#2','C2','C2','C2'];
 
     return [
-      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', type: 'synth', note: 'C4', stepNotes: [...defaultLeadPitches], volume: 0.85, mute: false, solo: false, steps: stepGrids[0] || new Array(16).fill(0) },
-      { id: 'acid_bass', name: 'Acid Bass (TB-303)', type: 'bass', note: 'C2', stepNotes: [...defaultBassPitches], volume: 0.95, mute: false, solo: false, steps: stepGrids[1] || new Array(16).fill(0) },
-      { id: 'drum_kick', name: 'Punch 909 Kick', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: stepGrids[2] || new Array(16).fill(0) },
-      { id: 'drum_snare', name: 'Studio Snare / Rim', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: stepGrids[3] || new Array(16).fill(0) },
-      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: stepGrids[4] || new Array(16).fill(0) },
-      { id: 'drum_808', name: 'Boom 808 Sub-Bass', type: 'drum', sample: 'sub808', volume: 0.9, mute: false, solo: false, steps: stepGrids[5] || new Array(16).fill(0) },
-      { id: 'drum_clap', name: 'Analog Handclap', type: 'drum', sample: 'clap', volume: 0.8, mute: false, solo: false, steps: stepGrids[6] || new Array(16).fill(0) },
-      { id: 'drum_crash', name: 'Cymbal Crash / Splash', type: 'drum', sample: 'crash', volume: 0.7, mute: false, solo: false, steps: stepGrids[7] || new Array(16).fill(0) }
+      { id: 'synth_lead', name: 'Synth Lead (Osc 1+2)', programId: 'prog_81_saw', gmBadge: 'PROG 081 · SAW LEAD', type: 'synth', note: 'C4', stepNotes: [...defaultLeadPitches], volume: 0.85, mute: false, solo: false, steps: stepGrids[0] || new Array(16).fill(0) },
+      { id: 'acid_bass', name: 'Acid Bass (TB-303)', programId: 'prog_38_acid', gmBadge: 'PROG 038 · 303 BASS', type: 'bass', note: 'C2', stepNotes: [...defaultBassPitches], volume: 0.95, mute: false, solo: false, steps: stepGrids[1] || new Array(16).fill(0) },
+      { id: 'drum_kick', name: 'Punch 909 Kick', programId: 'drum_kick', gmBadge: 'GM CH 10 · NOTE 36', type: 'drum', sample: 'kick', volume: 1.0, mute: false, solo: false, steps: stepGrids[2] || new Array(16).fill(0) },
+      { id: 'drum_snare', name: 'Studio Snare / Rim', programId: 'drum_snare', gmBadge: 'GM CH 10 · NOTE 38', type: 'drum', sample: 'snare', volume: 0.85, mute: false, solo: false, steps: stepGrids[3] || new Array(16).fill(0) },
+      { id: 'drum_hihat', name: 'Open 909 Hi-Hat', programId: 'drum_hihat', gmBadge: 'GM CH 10 · NOTE 42', type: 'drum', sample: 'hihat', volume: 0.65, mute: false, solo: false, steps: stepGrids[4] || new Array(16).fill(0) },
+      { id: 'drum_808', name: 'Boom 808 Sub-Bass', programId: 'drum_808', gmBadge: 'GM CH 10 · NOTE 35', type: 'drum', sample: 'sub808', volume: 0.9, mute: false, solo: false, steps: stepGrids[5] || new Array(16).fill(0) },
+      { id: 'drum_clap', name: 'Analog Handclap', programId: 'drum_clap', gmBadge: 'GM CH 10 · NOTE 39', type: 'drum', sample: 'clap', volume: 0.8, mute: false, solo: false, steps: stepGrids[6] || new Array(16).fill(0) },
+      { id: 'drum_crash', name: 'Cymbal Crash / Splash', programId: 'drum_crash', gmBadge: 'GM CH 10 · NOTE 49', type: 'drum', sample: 'crash', volume: 0.7, mute: false, solo: false, steps: stepGrids[7] || new Array(16).fill(0) }
     ];
   }
 
@@ -933,6 +933,33 @@ export class SynthEngine {
       return b;
     })();
 
-    return { kick: kickBuf, snare: snareBuf, hihat: hihatBuf, sub808: sub808Buf, clap: clapBuf, crash: crashBuf };
+      // 7. 909 Low/Mid Synth Tom
+      const tomBuf = (() => {
+        const len = Math.floor(0.32 * sr);
+        const b = this.ctx.createBuffer(1, len, sr);
+        const d = b.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const f = 95 + 90 * Math.exp(-t * 18);
+          d[i] = Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 9);
+        }
+        return b;
+      })();
+
+      // 8. 808 Cowbell / Rim Perc
+      const rimBuf = (() => {
+        const len = Math.floor(0.16 * sr);
+        const b = this.ctx.createBuffer(1, len, sr);
+        const d = b.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const f1 = Math.sin(2 * Math.PI * 540 * t);
+          const f2 = Math.sin(2 * Math.PI * 800 * t);
+          d[i] = (f1 + f2) * 0.45 * Math.exp(-t * 24);
+        }
+        return b;
+      })();
+
+      return { kick: kickBuf, snare: snareBuf, hihat: hihatBuf, sub808: sub808Buf, clap: clapBuf, crash: crashBuf, tom: tomBuf, rim: rimBuf };
+    }
   }
-}

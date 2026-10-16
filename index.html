@@ -103,6 +103,18 @@
       </button>
       <input type="file" id="midi-file-input" accept=".mid,.midi,audio/midi,audio/x-midi" style="display: none;" />
 
+      <!-- Full Song Project Save & Load (.localsynth.json + Browser Song Bank) -->
+      <button class="btn-transport btn-save-song" id="btn-save-song" title="Save complete Song Project (Patterns, Instruments, Knobs, BPM & Playlist)">
+        💾 SAVE SONG
+      </button>
+      <button class="btn-transport btn-load-song" id="btn-load-song" title="Load a saved .localsynth.json Song Project file">
+        📂 LOAD SONG
+      </button>
+      <select id="saved-songs-dropdown" class="pattern-dropdown" title="Quick-load Saved Songs from Browser Memory" style="max-width: 145px;">
+        <option value="">💿 SAVED SONGS...</option>
+      </select>
+      <input type="file" id="song-file-input" accept=".json,.localsynth.json,application/json" style="display: none;" />
+
       <!-- Hardware MIDI Indicator -->
       <div class="midi-status-pill" id="midi-status-pill" title="Plug in any USB MIDI Keyboard or Controller">
         <span class="midi-dot" id="midi-dot"></span>
@@ -269,21 +281,26 @@
       </div>
     </section>
 
-    <!-- FL Studio 16-Step Pattern Sequencer with Mute/Solo & Volume -->
+    <!-- FL Studio 16-Step Pattern Sequencer with Program Selector, Mute/Solo, Volume & Scrollable Rack -->
     <section class="sequencer-panel">
       <div class="sequencer-header">
         <div class="seq-title-group">
           <span class="sequencer-title">FL CHANNEL RACK / STEP SEQUENCER (16 STEPS)</span>
-          <span class="seq-hint">CLICK STEPS TO TOGGLE · EDITING <strong id="active-pattern-label" style="color:var(--accent-orange)">Pattern 1: Intro Groove</strong></span>
+          <span class="seq-hint">PICK ANY INSTRUMENT PROGRAM PER ROW · RIGHT-CLICK STEP TO CHANGE NOTE · EDITING <strong id="active-pattern-label" style="color:var(--accent-orange)">Pattern 1: Intro Groove</strong></span>
+        </div>
+        <div class="sequencer-actions">
+          <button id="btn-add-synth-ch" class="btn-rack-action" title="Add a new Melodic Synth/Instrument Track to the Channel Rack">+ ADD INSTRUMENT</button>
+          <button id="btn-add-drum-ch" class="btn-rack-action" title="Add a new Drum / Percussion Track to the Channel Rack">+ ADD DRUM</button>
+          <button id="btn-clear-pattern" class="btn-rack-action btn-rack-danger" title="Clear all steps in the current Pattern">CLEAR PAT</button>
         </div>
       </div>
 
-      <div class="step-channels-container" id="step-channels-container">
+      <div class="step-channels-container scrollable-rack" id="step-channels-container">
         <!-- Dynamically generated channel rows -->
       </div>
     </section>
 
-    <!-- FL Studio Timeline Playlist Arranger (Bars 1 to 16) -->
+    <!-- FL Studio Timeline Playlist Arranger (Scrollable Tracks & Bars) -->
     <section class="playlist-panel">
       <div class="playlist-header">
         <div class="playlist-title-group">
@@ -291,12 +308,13 @@
           <span class="playlist-hint">PAINT PATTERN BLOCKS ON TRACKS · CLICK BAR SLOT TO PLACE/REMOVE SELECTED PATTERN</span>
         </div>
         <div class="playlist-tools">
+          <button id="btn-add-playlist-track" class="btn-rack-action" title="Add another Track Row to the Song Playlist">+ ADD TRACK ROW</button>
           <span class="playlist-legend-label">ACTIVE PATTERN BRUSH:</span>
           <span id="brush-badge" class="brush-badge">Pattern 1</span>
         </div>
       </div>
 
-      <div class="playlist-container" id="playlist-container">
+      <div class="playlist-container scrollable-playlist" id="playlist-container">
         <!-- Header Timeline Ruler (Bars 1-16) -->
         <div class="playlist-ruler-row">
           <div class="track-header-spacer">TRACKS</div>
@@ -305,24 +323,40 @@
           </div>
         </div>
 
-        <!-- Playlist Tracks 1 to 4 -->
+        <!-- Playlist Tracks (Scrollable) -->
         <div class="playlist-tracks-body" id="playlist-tracks-body">
           <!-- Dynamic tracks rendered in main.js -->
         </div>
       </div>
     </section>
 
-    <!-- Interactive Piano Roll Keyboard -->
-    <section class="piano-keyboard-panel">
-      <div class="sequencer-header">
-        <span class="sequencer-title">POLYPHONIC KEYBOARD (C3 – C5)</span>
-        <span class="seq-hint">MOUSE CLICK OR COMPUTER KEYBOARD (A, W, S, E, D, F, G...)</span>
-      </div>
+    <!-- Bottom Performance Deck: 8-Pad Live MPC Drum Pad Section + 2-Octave Polyphonic Keyboard -->
+    <div class="bottom-performance-grid">
+      <!-- Live 8-Pad MPC Drum Pad Section -->
+      <section class="drum-pad-panel">
+        <div class="sequencer-header">
+          <div class="seq-title-group">
+            <span class="sequencer-title">🥁 MPC LIVE DRUM PAD RACK (8 PADS)</span>
+            <span class="seq-hint">CLICK PADS OR PRESS KEYS [1 – 8] · SHIFT+CLICK TO RECORD STEP</span>
+          </div>
+        </div>
+        <div class="drum-pads-grid" id="drum-pads-container">
+          <!-- 8 Live Drum Pads generated in main.js -->
+        </div>
+      </section>
 
-      <div class="keyboard-container" id="keyboard-container">
-        <!-- Generated keys -->
-      </div>
-    </section>
+      <!-- Interactive Piano Roll Keyboard -->
+      <section class="piano-keyboard-panel">
+        <div class="sequencer-header">
+          <span class="sequencer-title">🎹 POLYPHONIC KEYBOARD (C3 – C5)</span>
+          <span class="seq-hint">MOUSE CLICK, USB MIDI, OR KEYS (A, W, S, E, D, F, G...)</span>
+        </div>
+
+        <div class="keyboard-container" id="keyboard-container">
+          <!-- Generated keys -->
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- Footer -->
