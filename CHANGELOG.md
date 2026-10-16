@@ -4,6 +4,20 @@ All notable changes and architectural decisions for **LocalSynth** (in-browser V
 
 ---
 
+## [1.7.0] - 2026-10-16
+### Fixed & Improved
+- **Distinct Play / Pause Icons**:
+  - Replaced duplicate icons on the transport button with dynamic SVG toggling: displaying a sleek triangle `PLAY` icon when stopped, and switching to two parallel studio bars `PAUSE` when running.
+- **Flashing Studio Recording Indicator**:
+  - Clicking `RECORD AUDIO` now switches into an animated, flashing red studio banner (`rec-banner-flash` keyframe) with a pulsing white record indicator dot (`dot-blink` keyframe) and label `RECORDING...`.
+  - Clicking it again immediately stops recording, restores the normal button state, and triggers the audio download.
+- **Deep LocalDAW Multitrack Integration (`🎛️ TO LOCALDAW`)**:
+  - Clicking `TO LOCALDAW` now halts any active synth playback and stops active recording automatically.
+  - Automatically packages the audio (either live recording or high-definition offline stem render) along with BPM and patch name into a cross-origin storage payload.
+  - Deployed matching listener to `LocalDAW` (`localdaw.com` / `localfilm-studio.pages.dev`) that immediately decodes the stem, creates a dedicated `🎹 LocalSynth Master` audio track with waveform peaks, and inserts the clip at 0:00.
+
+---
+
 ## [1.6.0] - 2026-10-15
 ### Added
 - **New Intro Splash Artwork**:
