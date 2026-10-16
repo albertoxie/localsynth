@@ -77,9 +77,8 @@
         <svg class="icon-play" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        <svg class="icon-pause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
-          <rect x="5" y="4" width="4" height="16" rx="1"/>
-          <rect x="15" y="4" width="4" height="16" rx="1"/>
+        <svg class="icon-stop" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
         </svg>
         <span id="play-text">PLAY</span>
       </button>
@@ -94,6 +93,12 @@
       <button class="btn-transport btn-send-localdaw" id="btn-send-localdaw" title="Bounce and open multitrack stem in LocalDAW">
         🎛️ TO LOCALDAW
       </button>
+
+      <!-- Hardware MIDI Indicator -->
+      <div class="midi-status-pill" id="midi-status-pill" title="Plug in any USB MIDI Keyboard or Controller">
+        <span class="midi-dot" id="midi-dot"></span>
+        <span id="midi-status-text">MIDI: READY</span>
+      </div>
 
       <div class="bpm-control">
         <span>TEMPO</span>

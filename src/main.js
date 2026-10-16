@@ -43,9 +43,15 @@ function initSequencerUI() {
       e.target.classList.toggle('active', ch.solo);
     });
 
-    // Volume slider listener
-    info.querySelector('.channel-vol-slider').addEventListener('input', (e) => {
+    // Volume slider listener & double-click reset to default
+    const volSlider = info.querySelector('.channel-vol-slider');
+    if (ch.defaultVolume === undefined) ch.defaultVolume = ch.volume;
+    volSlider.addEventListener('input', (e) => {
       ch.volume = parseFloat(e.target.value);
+    });
+    volSlider.addEventListener('dblclick', () => {
+      ch.volume = ch.defaultVolume;
+      volSlider.value = ch.defaultVolume;
     });
 
     row.appendChild(info);
@@ -278,28 +284,17 @@ function initKeyboardUI() {
   });
 }
 
-// Precision Smooth Rotary Knobs & Parameter Binding
+// Precision Smooth Rotary Knobs (Left/Right Drag + Left/Right Click Step + Double-Click Recenter)
 function initKnobs() {
   const knobs = document.querySelectorAll('.rotary-knob');
   knobs.forEach((knob) => {
     const param = knob.dataset.param;
     let currentAngle = 0; // Cumulative angle in degrees (-135 to +135)
+    let startX = 0;
     let startY = 0;
+    let didDrag = false;
 
-    const updateKnobTransform = (angle) => {
-      currentAngle = Math.max(-135, Math.min(135, angle));
-      knob.style.transform = `rotate(${currentAngle}deg)`;
-    };
-
-    const onPointerMove = (e) => {
-      const deltaY = startY - e.clientY;
-      startY = e.clientY;
-
-      updateKnobTransform(currentAngle + deltaY * 2.0);
-
-      // Normalized 0 to 1
-      const norm = (currentAngle + 135) / 270;
-
+    const applyNormalizedParam = (norm) => {
       if (param === 'filterCutoff') {
         const minF = 40;
         const maxF = 18000;
@@ -331,25 +326,63 @@ function initKnobs() {
       }
     };
 
+    const updateKnobTransform = (angle) => {
+      currentAngle = Math.max(-135, Math.min(135, angle));
+      knob.style.transform = `rotate(${currentAngle}deg)`;
+      const norm = (currentAngle + 135) / 270;
+      applyNormalizedParam(norm);
+    };
+
+    const onPointerMove = (e) => {
+      const deltaX = e.clientX - startX;
+      const deltaY = startY - e.clientY;
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        didDrag = true;
+      }
+      startX = e.clientX;
+      startY = e.clientY;
+
+      // Twist left and right with horizontal movement (plus slight vertical assist)
+      const delta = deltaX * 2.2 + deltaY * 0.6;
+      updateKnobTransform(currentAngle + delta);
+    };
+
     const onPointerUp = (e) => {
       try { knob.releasePointerCapture(e.pointerId); } catch (err) {}
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+
+      // If clicked without dragging, twist left or right depending on which side of the knob was clicked!
+      if (!didDrag) {
+        const rect = knob.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        if (clickX < rect.width / 2) {
+          // Clicked left half -> twist left (-15 deg)
+          updateKnobTransform(currentAngle - 15);
+        } else {
+          // Clicked right half -> twist right (+15 deg)
+          updateKnobTransform(currentAngle + 15);
+        }
+      }
     };
 
     knob.addEventListener('pointerdown', (e) => {
+      startX = e.clientX;
       startY = e.clientY;
+      didDrag = false;
       try { knob.setPointerCapture(e.pointerId); } catch (err) {}
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
     });
 
-    // Double-click to reset knob to center/default
-    knob.addEventListener('dblclick', () => {
-      updateKnobTransform(0);
-      const norm = 0.5;
-      if (param === 'filterCutoff') synth.params.filterCutoff = 2000;
-      else if (param === 'filterResonance') synth.params.filterResonance = 4.0;
+    // Double-click to recenter ANY knob to 0 degrees (12 o'clock center default)
+    knob.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      currentAngle = 0;
+      knob.style.transform = `rotate(0deg)`;
+      if (param === 'filterCutoff') synth.params.filterCutoff = 1800;
+      else if (param === 'filterResonance') synth.params.filterResonance = 4.5;
       else if (param === 'filterEnvAmount') synth.params.filterEnvAmount = 2400;
       else if (param === 'osc2Detune') synth.params.osc2Detune = 0;
       else if (param === 'delayTime') synth.delayNode.delayTime.value = 0.25;
@@ -357,20 +390,17 @@ function initKnobs() {
       else if (param === 'reverbMix') { synth.params.reverbMix = 0.25; if (synth.reverbGain) synth.reverbGain.gain.value = 0.25; }
       else if (param === 'chorusMix') { synth.params.chorusMix = 0.3; if (synth.chorusGain) synth.chorusGain.gain.value = 0.3; }
       else if (param === 'distDrive') synth.setDistortion(0);
+      else if (param === 'ampAttack') synth.params.ampAttack = 0.01;
+      else if (param === 'ampDecay') synth.params.ampDecay = 0.25;
+      else if (param === 'ampRelease') synth.params.ampRelease = 0.35;
     });
 
-    // Mouse wheel support for effortless knob tweaking
+    // Mouse wheel / trackpad horizontal & vertical support
     knob.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const delta = e.deltaY < 0 ? 8 : -8;
-      updateKnobTransform(currentAngle + delta);
-      const norm = (currentAngle + 135) / 270;
-      if (param === 'filterCutoff') synth.params.filterCutoff = 40 * Math.pow(18000 / 40, norm);
-      else if (param === 'filterResonance') synth.params.filterResonance = 0.1 + norm * 14.9;
-      else if (param === 'filterEnvAmount') synth.params.filterEnvAmount = norm * 7000;
-      else if (param === 'reverbMix') { synth.params.reverbMix = norm * 0.9; if (synth.reverbGain) synth.reverbGain.gain.value = norm * 0.9; }
-      else if (param === 'chorusMix') { synth.params.chorusMix = norm * 0.8; if (synth.chorusGain) synth.chorusGain.gain.value = norm * 0.8; }
-      else if (param === 'distDrive') synth.setDistortion(norm);
+      const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : -e.deltaY;
+      const step = rawDelta > 0 ? 10 : -10;
+      updateKnobTransform(currentAngle + step);
     }, { passive: false });
   });
 
@@ -492,17 +522,17 @@ function initTransport() {
 
   const updatePlayBtnUI = (isPlaying) => {
     const iconPlay = playBtn.querySelector('.icon-play');
-    const iconPause = playBtn.querySelector('.icon-pause');
+    const iconStop = playBtn.querySelector('.icon-stop');
     if (isPlaying) {
       playBtn.classList.add('playing');
-      playText.textContent = 'PAUSE';
+      playText.textContent = 'STOP';
       if (iconPlay) iconPlay.style.display = 'none';
-      if (iconPause) iconPause.style.display = 'inline-block';
+      if (iconStop) iconStop.style.display = 'inline-block';
     } else {
       playBtn.classList.remove('playing');
       playText.textContent = 'PLAY';
       if (iconPlay) iconPlay.style.display = 'inline-block';
-      if (iconPause) iconPause.style.display = 'none';
+      if (iconStop) iconStop.style.display = 'none';
     }
   };
 
@@ -541,12 +571,16 @@ function initTransport() {
     });
   }
 
-  // Send to LocalDAW Integration: Stops playback & recording, packages audio into localdaw track payload
+  // Send to LocalDAW Integration: Synchronously opens window (avoids popup blocker), stops playback/recording, and dispatches audio payload via postMessage
   if (sendDawBtn) {
     sendDawBtn.addEventListener('click', async () => {
+      // 1. Open LocalDAW window synchronously inside user gesture to guarantee no popup block!
+      const dawUrl = `https://localdaw.com/?source=localsynth&bpm=${synth.bpm}`;
+      const dawWindow = window.open(dawUrl, '_blank');
+
       let audioBase64 = null;
 
-      // 1. If currently recording, capture the recorded blob
+      // 2. If currently recording, capture the recorded blob
       if (synth.isRecording) {
         recordBtn.classList.remove('recording');
         recordText.textContent = 'PACKAGING...';
@@ -564,7 +598,7 @@ function initTransport() {
         }
       }
 
-      // 2. Stop synth playback immediately
+      // 3. Stop synth playback immediately
       if (synth.isPlaying) {
         synth.stopPlayback();
         updatePlayBtnUI(false);
@@ -573,12 +607,11 @@ function initTransport() {
         document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
       }
 
-      // 3. If no active live recording was captured, synthesize a high-quality 2-bar bounce of the active pattern
+      // 4. If no active live recording was captured, synthesize a high-quality 2-bar bounce of the active pattern
       if (!audioBase64) {
         sendDawBtn.textContent = 'RENDERING STEM...';
         try {
           const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 44100 * 4, 44100);
-          // Quick offline rendering of pattern synth/drums
           const activePat = synth.getActivePattern();
           const stepSec = (60 / synth.bpm) / 4;
           for (let step = 0; step < 16 * 2; step++) {
@@ -613,7 +646,6 @@ function initTransport() {
           }
 
           const renderedBuffer = await offlineCtx.startRendering();
-          // Convert AudioBuffer to WAV ArrayBuffer
           const numChannels = renderedBuffer.numberOfChannels;
           const length = renderedBuffer.length * numChannels * 2 + 44;
           const wavBuffer = new ArrayBuffer(length);
@@ -644,11 +676,11 @@ function initTransport() {
             }
           }
 
-          // Convert ArrayBuffer to Base64
           let binary = '';
           const bytes = new Uint8Array(wavBuffer);
-          for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
+          const chunkSize = 8192;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
           }
           audioBase64 = btoa(binary);
         } catch (e) {
@@ -657,8 +689,9 @@ function initTransport() {
         sendDawBtn.textContent = '🎛️ TO LOCALDAW';
       }
 
-      // 4. Save payload to localStorage so LocalDAW immediately imports it into a new track
+      // 5. Build export payload
       const payload = {
+        type: 'LOCALSYNTH_STEM_EXPORT',
         name: `LocalSynth ${synth.playMode} Groove`,
         patch: synth.getActivePattern().name.split(':')[0],
         bpm: synth.bpm,
@@ -667,13 +700,19 @@ function initTransport() {
 
       try {
         localStorage.setItem('localsynth_export_payload', JSON.stringify(payload));
-      } catch (err) {
-        console.warn('Could not store full audio in localStorage:', err);
-      }
+      } catch (err) {}
 
-      // 5. Open LocalDAW
-      const dawUrl = `https://localdaw.com/?source=localsynth&bpm=${synth.bpm}`;
-      window.open(dawUrl, '_blank');
+      // 6. Send via cross-origin postMessage to LocalDAW window repeatedly as it boots up
+      if (dawWindow) {
+        let attempts = 0;
+        const postTimer = setInterval(() => {
+          attempts++;
+          try {
+            dawWindow.postMessage(payload, '*');
+          } catch (e) {}
+          if (attempts >= 12) clearInterval(postTimer);
+        }, 600);
+      }
     });
   }
 
@@ -781,6 +820,104 @@ function initSplashScreen() {
   });
 }
 
+// Web MIDI API Hardware Controller Support
+function initMIDI() {
+  const midiStatusText = document.getElementById('midi-status-text');
+  const midiDot = document.getElementById('midi-dot');
+  const midiPill = document.getElementById('midi-status-pill');
+
+  const midiNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const midiNumberToNoteName = (midiNum) => {
+    const octave = Math.floor(midiNum / 12) - 1;
+    const note = midiNames[midiNum % 12];
+    return `${note}${octave}`;
+  };
+
+  if (!navigator.requestMIDIAccess) {
+    if (midiStatusText) midiStatusText.textContent = 'MIDI: UNSUPPORTED';
+    return;
+  }
+
+  const connectMIDI = () => {
+    navigator.requestMIDIAccess().then((midiAccess) => {
+      const attachInputs = () => {
+        const inputs = Array.from(midiAccess.inputs.values());
+        if (inputs.length > 0) {
+          const firstName = inputs[0].name || 'USB MIDI';
+          if (midiStatusText) midiStatusText.textContent = `MIDI: ${firstName.substring(0, 14).toUpperCase()}`;
+          if (midiDot) midiDot.classList.add('connected');
+        } else {
+          if (midiStatusText) midiStatusText.textContent = 'MIDI: READY';
+          if (midiDot) midiDot.classList.remove('connected');
+        }
+
+        inputs.forEach((input) => {
+          input.onmidimessage = (msg) => {
+            const [status, data1, data2] = msg.data;
+            const command = status & 0xf0;
+
+            if (midiDot) {
+              midiDot.classList.add('active-signal');
+              clearTimeout(midiDot._blinkTimer);
+              midiDot._blinkTimer = setTimeout(() => midiDot.classList.remove('active-signal'), 120);
+            }
+
+            // Note On
+            if (command === 0x90 && data2 > 0) {
+              const noteName = midiNumberToNoteName(data1);
+              synth.noteOn(noteName);
+              const keyEl = document.querySelector(`[data-note="${noteName}"]`);
+              if (keyEl) keyEl.classList.add('active');
+            }
+            // Note Off (or Note On with 0 velocity)
+            else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+              const noteName = midiNumberToNoteName(data1);
+              synth.noteOff(noteName);
+              const keyEl = document.querySelector(`[data-note="${noteName}"]`);
+              if (keyEl) keyEl.classList.remove('active');
+            }
+            // Control Change (CC) -> Filter Cutoff (CC 1 Mod Wheel or CC 74 Cutoff) & Resonance (CC 71)
+            else if (command === 0xB0) {
+              const norm = data2 / 127;
+              if (data1 === 1 || data1 === 74 || data1 === 16) {
+                const freq = 40 * Math.pow(18000 / 40, norm);
+                synth.params.filterCutoff = freq;
+                synth.updateFilter();
+                const knob = document.getElementById('knob-cutoff');
+                if (knob) {
+                  const deg = (norm * 270) - 135;
+                  knob.dataset.deg = deg;
+                  knob.style.transform = `rotate(${deg}deg)`;
+                }
+              } else if (data1 === 71 || data1 === 17) {
+                const res = norm * 22;
+                synth.params.filterRes = res;
+                synth.updateFilter();
+                const knob = document.getElementById('knob-resonance');
+                if (knob) {
+                  const deg = (norm * 270) - 135;
+                  knob.dataset.deg = deg;
+                  knob.style.transform = `rotate(${deg}deg)`;
+                }
+              }
+            }
+          };
+        });
+      };
+
+      attachInputs();
+      midiAccess.onstatechange = attachInputs;
+    }).catch(() => {
+      if (midiStatusText) midiStatusText.textContent = 'MIDI: CLICK TO ENABLE';
+    });
+  };
+
+  connectMIDI();
+  if (midiPill) {
+    midiPill.addEventListener('click', connectMIDI);
+  }
+}
+
 // Boot System
 window.addEventListener('DOMContentLoaded', () => {
   initSplashScreen();
@@ -789,5 +926,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initKeyboardUI();
   initKnobs();
   initTransport();
+  initMIDI();
   startOscilloscope();
 });
+

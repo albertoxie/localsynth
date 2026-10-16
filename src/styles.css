@@ -705,6 +705,43 @@ main.synth-studio {
   color: #fff;
 }
 
+.midi-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #11151f;
+  border: 1px solid var(--border-color);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.midi-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.1s ease;
+}
+
+.midi-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.midi-dot.active-signal {
+  background: #f97316 !important;
+  box-shadow: 0 0 12px #f97316 !important;
+  transform: scale(1.25);
+}
+
+.rotary-knob {
+  cursor: ew-resize !important;
+}
+
 .step-btn {
   position: relative;
 }
