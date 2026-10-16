@@ -646,6 +646,7 @@ main.synth-studio {
   background: #1e1919;
   border-color: #7f1d1d;
   color: #f87171;
+  transition: all 0.2s ease;
 }
 
 .btn-record-audio:hover {
@@ -656,27 +657,39 @@ main.synth-studio {
 
 .btn-record-audio.recording {
   background: #ef4444 !important;
-  color: #fff !important;
+  color: #ffffff !important;
   border-color: #fca5a5 !important;
-  animation: pulse-red 1s infinite alternate;
+  animation: rec-banner-flash 1s infinite alternate;
 }
 
-@keyframes pulse-red {
-  0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
-  100% { box-shadow: 0 0 16px rgba(239, 68, 68, 0.9); }
+@keyframes rec-banner-flash {
+  0% {
+    background-color: #dc2626 !important;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  }
+  100% {
+    background-color: #7f1d1d !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 1);
+  }
 }
 
 .rec-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: #ef4444;
   display: inline-block;
-  margin-right: 2px;
+  margin-right: 4px;
 }
 
 .btn-record-audio.recording .rec-dot {
-  background: #fff;
+  background: #ffffff;
+  animation: dot-blink 0.6s infinite alternate;
+}
+
+@keyframes dot-blink {
+  0% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 8px #ffffff; }
+  100% { opacity: 0.2; transform: scale(0.9); box-shadow: none; }
 }
 
 .btn-send-localdaw {

@@ -490,18 +490,32 @@ function initTransport() {
     }
   };
 
+  const updatePlayBtnUI = (isPlaying) => {
+    const iconPlay = playBtn.querySelector('.icon-play');
+    const iconPause = playBtn.querySelector('.icon-pause');
+    if (isPlaying) {
+      playBtn.classList.add('playing');
+      playText.textContent = 'PAUSE';
+      if (iconPlay) iconPlay.style.display = 'none';
+      if (iconPause) iconPause.style.display = 'inline-block';
+    } else {
+      playBtn.classList.remove('playing');
+      playText.textContent = 'PLAY';
+      if (iconPlay) iconPlay.style.display = 'inline-block';
+      if (iconPause) iconPause.style.display = 'none';
+    }
+  };
+
   playBtn.addEventListener('click', () => {
     if (synth.isPlaying) {
       synth.stopPlayback();
-      playBtn.classList.remove('playing');
-      playText.textContent = 'PLAY';
+      updatePlayBtnUI(false);
       document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
       document.querySelectorAll('.ruler-bar-tick').forEach(t => t.classList.remove('current-bar-tick'));
       document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
     } else {
       synth.startPlayback(handlePlaybackTick);
-      playBtn.classList.add('playing');
-      playText.textContent = 'STOP';
+      updatePlayBtnUI(true);
     }
   });
 
@@ -509,26 +523,155 @@ function initTransport() {
   if (recordBtn) {
     recordBtn.addEventListener('click', async () => {
       if (synth.isRecording) {
+        // Stop recording
         recordBtn.classList.remove('recording');
         recordText.textContent = 'SAVING...';
         await synth.stopRecordingAndDownload(`LocalSynth_${synth.playMode}_${Date.now()}.webm`);
         recordText.textContent = 'RECORD AUDIO';
       } else {
+        // Start recording
         synth.startRecording();
         recordBtn.classList.add('recording');
         recordText.textContent = 'RECORDING...';
         if (!synth.isPlaying) {
           synth.startPlayback(handlePlaybackTick);
-          playBtn.classList.add('playing');
-          playText.textContent = 'STOP';
+          updatePlayBtnUI(true);
         }
       }
     });
   }
 
-  // Send to LocalDAW Integration
+  // Send to LocalDAW Integration: Stops playback & recording, packages audio into localdaw track payload
   if (sendDawBtn) {
-    sendDawBtn.addEventListener('click', () => {
+    sendDawBtn.addEventListener('click', async () => {
+      let audioBase64 = null;
+
+      // 1. If currently recording, capture the recorded blob
+      if (synth.isRecording) {
+        recordBtn.classList.remove('recording');
+        recordText.textContent = 'PACKAGING...';
+        const blob = await synth.stopRecording();
+        recordText.textContent = 'RECORD AUDIO';
+        if (blob) {
+          audioBase64 = await new Promise((res) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64 = reader.result.split(',')[1];
+              res(base64);
+            };
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+
+      // 2. Stop synth playback immediately
+      if (synth.isPlaying) {
+        synth.stopPlayback();
+        updatePlayBtnUI(false);
+        document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('current-step-tick'));
+        document.querySelectorAll('.ruler-bar-tick').forEach(t => t.classList.remove('current-bar-tick'));
+        document.querySelectorAll('.track-bar-slot').forEach(s => s.classList.remove('current-bar-active'));
+      }
+
+      // 3. If no active live recording was captured, synthesize a high-quality 2-bar bounce of the active pattern
+      if (!audioBase64) {
+        sendDawBtn.textContent = 'RENDERING STEM...';
+        try {
+          const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 44100 * 4, 44100);
+          // Quick offline rendering of pattern synth/drums
+          const activePat = synth.getActivePattern();
+          const stepSec = (60 / synth.bpm) / 4;
+          for (let step = 0; step < 16 * 2; step++) {
+            const stepIdx = step % 16;
+            const t = step * stepSec;
+            activePat.channels.forEach(ch => {
+              if (ch.steps[stepIdx] === 1 && !ch.mute) {
+                if (ch.type === 'drum' && synth.drumBuffers[ch.sample]) {
+                  const s = offlineCtx.createBufferSource();
+                  s.buffer = synth.drumBuffers[ch.sample];
+                  const g = offlineCtx.createGain();
+                  g.gain.value = ch.volume || 1.0;
+                  s.connect(g);
+                  g.connect(offlineCtx.destination);
+                  s.start(t);
+                } else if (ch.type === 'synth' || ch.type === 'bass') {
+                  const osc = offlineCtx.createOscillator();
+                  osc.type = ch.type === 'bass' ? 'sawtooth' : 'square';
+                  const note = (ch.stepNotes && ch.stepNotes[stepIdx]) ? ch.stepNotes[stepIdx] : ch.note;
+                  osc.frequency.setValueAtTime(synth.midiToFreq(synth.noteToMidi(note)), t);
+                  const env = offlineCtx.createGain();
+                  env.gain.setValueAtTime(0, t);
+                  env.gain.linearRampToValueAtTime(0.7 * (ch.volume || 1.0), t + 0.01);
+                  env.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                  osc.connect(env);
+                  env.connect(offlineCtx.destination);
+                  osc.start(t);
+                  osc.stop(t + 0.18);
+                }
+              }
+            });
+          }
+
+          const renderedBuffer = await offlineCtx.startRendering();
+          // Convert AudioBuffer to WAV ArrayBuffer
+          const numChannels = renderedBuffer.numberOfChannels;
+          const length = renderedBuffer.length * numChannels * 2 + 44;
+          const wavBuffer = new ArrayBuffer(length);
+          const view = new DataView(wavBuffer);
+          const writeString = (offset, str) => {
+            for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+          };
+          writeString(0, 'RIFF');
+          view.setUint32(4, 36 + renderedBuffer.length * numChannels * 2, true);
+          writeString(8, 'WAVE');
+          writeString(12, 'fmt ');
+          view.setUint32(16, 16, true);
+          view.setUint16(20, 1, true); // PCM
+          view.setUint16(22, numChannels, true);
+          view.setUint32(24, 44100, true);
+          view.setUint32(28, 44100 * numChannels * 2, true);
+          view.setUint16(32, numChannels * 2, true);
+          view.setUint16(34, 16, true);
+          writeString(36, 'data');
+          view.setUint32(40, renderedBuffer.length * numChannels * 2, true);
+
+          let offset = 44;
+          for (let i = 0; i < renderedBuffer.length; i++) {
+            for (let channel = 0; channel < numChannels; channel++) {
+              const sample = Math.max(-1, Math.min(1, renderedBuffer.getChannelData(channel)[i]));
+              view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+              offset += 2;
+            }
+          }
+
+          // Convert ArrayBuffer to Base64
+          let binary = '';
+          const bytes = new Uint8Array(wavBuffer);
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          audioBase64 = btoa(binary);
+        } catch (e) {
+          console.warn('[Offline render fallback error]', e);
+        }
+        sendDawBtn.textContent = '🎛️ TO LOCALDAW';
+      }
+
+      // 4. Save payload to localStorage so LocalDAW immediately imports it into a new track
+      const payload = {
+        name: `LocalSynth ${synth.playMode} Groove`,
+        patch: synth.getActivePattern().name.split(':')[0],
+        bpm: synth.bpm,
+        audioBase64: audioBase64
+      };
+
+      try {
+        localStorage.setItem('localsynth_export_payload', JSON.stringify(payload));
+      } catch (err) {
+        console.warn('Could not store full audio in localStorage:', err);
+      }
+
+      // 5. Open LocalDAW
       const dawUrl = `https://localdaw.com/?source=localsynth&bpm=${synth.bpm}`;
       window.open(dawUrl, '_blank');
     });

@@ -466,7 +466,7 @@ export class SynthEngine {
   }
 
   stopRecordingAndDownload(filename = 'LocalSynth_Song.webm') {
-    if (!this.mediaRecorder || !this.isRecording) return;
+    if (!this.mediaRecorder || !this.isRecording) return Promise.resolve(null);
     this.isRecording = false;
 
     return new Promise((resolve) => {
@@ -478,6 +478,19 @@ export class SynthEngine {
         a.download = filename;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
+        resolve(blob);
+      };
+      this.mediaRecorder.stop();
+    });
+  }
+
+  stopRecording() {
+    if (!this.mediaRecorder || !this.isRecording) return Promise.resolve(null);
+    this.isRecording = false;
+
+    return new Promise((resolve) => {
+      this.mediaRecorder.onstop = () => {
+        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         resolve(blob);
       };
       this.mediaRecorder.stop();
